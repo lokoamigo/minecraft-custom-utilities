@@ -1,0 +1,12 @@
+FROM maven:3.9-eclipse-temurin-25 AS plugin-build
+
+WORKDIR /workspace
+
+COPY pom.xml .
+COPY src ./src
+
+RUN mvn -q package
+
+FROM itzg/minecraft-server:java25
+
+COPY --from=plugin-build /workspace/target/FastMinecarts.jar /plugins/FastMinecarts.jar

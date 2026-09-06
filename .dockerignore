@@ -1,0 +1,7 @@
+.git
+.agents
+.codex
+target
+paper-*.jar
+docker-data
+*.log
