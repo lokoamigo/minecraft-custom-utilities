@@ -6,6 +6,10 @@ FastMinecarts only modifies minecarts while a player is riding them. Empty carts
 non-player passenger carts are restored to vanilla minecart settings and skipped by
 the movement logic.
 
+Detector rails and activator rails are treated as vanilla-speed rail sections. When
+one is under or ahead of a player-ridden cart, the plugin caps velocity to vanilla
+minecart speed and then leaves rail physics alone.
+
 Rail look-ahead checks are cached by rail block and travel direction. The cache is
 bounded, expires automatically, and is invalidated near rails that are placed,
 broken, or updated by physics.

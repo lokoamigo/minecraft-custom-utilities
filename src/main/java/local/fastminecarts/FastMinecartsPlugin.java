@@ -106,6 +106,7 @@ public final class FastMinecartsPlugin extends JavaPlugin implements Listener {
     private enum GeometryKind {
         CURVE,
         INCLINE,
+        VANILLA_RAIL,
         STRAIGHT
     }
 
@@ -570,6 +571,27 @@ public final class FastMinecartsPlugin extends JavaPlugin implements Listener {
             return;
         }
 
+        double vanillaRailSpeedLimit = findVanillaRailSpeedLimit(
+                event,
+                travelFace,
+                currentSpeedSquared
+        );
+
+        if (vanillaRailSpeedLimit >= 0.0) {
+            geometryLimitedMinecarts.add(minecart.getUniqueId());
+
+            if (currentSpeedSquared > vanillaRailSpeedLimit * vanillaRailSpeedLimit) {
+                limitVelocity(
+                        minecart,
+                        velocity,
+                        currentSpeedSquared,
+                        vanillaRailSpeedLimit
+                );
+            }
+
+            return;
+        }
+
         if (isOnIncline(event)) {
             return;
         }
@@ -755,6 +777,39 @@ public final class FastMinecartsPlugin extends JavaPlugin implements Listener {
         );
     }
 
+    private double findVanillaRailSpeedLimit(
+            VehicleMoveEvent event,
+            BlockFace travelFace,
+            double currentSpeedSquared
+    ) {
+        Block toRail = findAssociatedRail(event.getTo());
+
+        if (isVanillaOnlyRail(toRail)) {
+            return VANILLA_MAX_SPEED_PER_TICK;
+        }
+
+        Block fromRail = findAssociatedRail(event.getFrom());
+
+        if (isVanillaOnlyRail(fromRail)) {
+            return VANILLA_MAX_SPEED_PER_TICK;
+        }
+
+        Block startRail = toRail != null ? toRail : fromRail;
+
+        if (startRail == null) {
+            return -1.0;
+        }
+
+        int lookaheadBlocks = calculateLookaheadBlocks(currentSpeedSquared);
+
+        return findCachedGeometrySpeedLimit(
+                startRail,
+                travelFace,
+                lookaheadBlocks,
+                GeometryKind.VANILLA_RAIL
+        );
+    }
+
     private boolean hasStraightRailAhead(
             VehicleMoveEvent event,
             Vector velocity,
@@ -917,6 +972,7 @@ public final class FastMinecartsPlugin extends JavaPlugin implements Listener {
         return switch (kind) {
             case CURVE -> isCurvedRail(block);
             case INCLINE -> isInclineRail(block);
+            case VANILLA_RAIL -> isVanillaOnlyRail(block);
             case STRAIGHT -> false;
         };
     }
@@ -925,6 +981,7 @@ public final class FastMinecartsPlugin extends JavaPlugin implements Listener {
         return switch (kind) {
             case CURVE -> curveSpeedPerTick;
             case INCLINE -> inclineSpeedPerTick;
+            case VANILLA_RAIL -> VANILLA_MAX_SPEED_PER_TICK;
             case STRAIGHT -> -1.0;
         };
     }
@@ -1020,6 +1077,17 @@ public final class FastMinecartsPlugin extends JavaPlugin implements Listener {
         }
 
         return isInclineShape(rail.getShape());
+    }
+
+    private boolean isVanillaOnlyRail(Block block) {
+        if (block == null) {
+            return false;
+        }
+
+        Material material = block.getType();
+
+        return material == Material.DETECTOR_RAIL
+                || material == Material.ACTIVATOR_RAIL;
     }
 
     private boolean isOnIncline(VehicleMoveEvent event) {
