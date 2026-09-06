@@ -6,6 +6,9 @@
 # leaving acceleration entirely to vanilla Minecraft.
 #acceleration-blocks-per-second-squared: 0.0
 
+# Maximum speed while approaching or riding curved rails.
+#curve-speed-blocks-per-second: 8.0
+
 # Vanilla minecarts slow down more when empty.
 #slow-when-empty: true
 
@@ -15,7 +18,8 @@
 
 
 # speed defaults
-speed-blocks-per-second: 40
-acceleration-blocks-per-second-squared: 60
+speed-blocks-per-second: 8.0
+acceleration-blocks-per-second-squared: 0.0
+curve-speed-blocks-per-second: 8.0
 slow-when-empty: true
 boost-on-all-rails: false

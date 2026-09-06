@@ -6,5 +6,5 @@ api-version: '26.2'
 
 permissions:
   fastminecarts.admin:
-    description: Allows changing the FastMinecarts speed.
+    description: Allows changing and reloading FastMinecarts settings.
     default: op

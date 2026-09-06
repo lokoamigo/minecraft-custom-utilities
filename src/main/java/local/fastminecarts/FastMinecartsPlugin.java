@@ -11,6 +11,7 @@ import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.block.data.Powerable;
+import org.bukkit.block.data.Rail;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Minecart;
 import org.bukkit.event.EventHandler;
@@ -30,9 +31,14 @@ public final class FastMinecartsPlugin extends JavaPlugin implements Listener {
 
     private static final double DEFAULT_SPEED_BPS = 8.0;
     private static final double DEFAULT_ACCELERATION_BPS2 = 0.0;
+    private static final double DEFAULT_CURVE_SPEED_BPS = 8.0;
 
     private static final double MAX_ALLOWED_SPEED_BPS = 1000.0;
     private static final double MAX_ALLOWED_ACCELERATION_BPS2 = 10000.0;
+
+    private static final int CURVE_LOOKAHEAD_TICKS = 3;
+    private static final int CURVE_LOOKAHEAD_EXTRA_BLOCKS = 2;
+    private static final int MAX_CURVE_LOOKAHEAD_BLOCKS = 64;
 
     /*
      * Prevents attempting to normalize a velocity vector that is effectively zero.
@@ -47,6 +53,7 @@ public final class FastMinecartsPlugin extends JavaPlugin implements Listener {
      */
     private double speedBlocksPerSecond;
     private double accelerationBlocksPerSecondSquared;
+    private double curveSpeedBlocksPerSecond;
 
     private boolean slowWhenEmpty;
     private boolean boostOnAllRails;
@@ -60,6 +67,8 @@ public final class FastMinecartsPlugin extends JavaPlugin implements Listener {
     private double maxSpeedPerTick;
     private double maxSpeedPerTickSquared;
     private double accelerationPerTick;
+    private double curveSpeedPerTick;
+    private double curveSpeedPerTickSquared;
 
     @Override
     public void onEnable() {
@@ -97,9 +106,10 @@ public final class FastMinecartsPlugin extends JavaPlugin implements Listener {
 
         getLogger().info(String.format(
                 Locale.ROOT,
-                "Enabled. Target speed: %.2f blocks/sec, acceleration: %.2f blocks/sec^2. Updated %d loaded minecart(s).",
+                "Enabled. Target speed: %.2f blocks/sec, acceleration: %.2f blocks/sec^2, curve speed: %.2f blocks/sec. Updated %d loaded minecart(s).",
                 speedBlocksPerSecond,
                 accelerationBlocksPerSecondSquared,
+                curveSpeedBlocksPerSecond,
                 changed
         ));
 
@@ -130,6 +140,11 @@ public final class FastMinecartsPlugin extends JavaPlugin implements Listener {
         getConfig().addDefault(
                 "acceleration-blocks-per-second-squared",
                 DEFAULT_ACCELERATION_BPS2
+        );
+
+        getConfig().addDefault(
+                "curve-speed-blocks-per-second",
+                DEFAULT_CURVE_SPEED_BPS
         );
 
         /*
@@ -178,6 +193,16 @@ public final class FastMinecartsPlugin extends JavaPlugin implements Listener {
                 MAX_ALLOWED_ACCELERATION_BPS2
         );
 
+        curveSpeedBlocksPerSecond = sanitizeSetting(
+                "curve-speed-blocks-per-second",
+                getConfig().getDouble(
+                        "curve-speed-blocks-per-second",
+                        DEFAULT_CURVE_SPEED_BPS
+                ),
+                DEFAULT_CURVE_SPEED_BPS,
+                MAX_ALLOWED_SPEED_BPS
+        );
+
         slowWhenEmpty = getConfig().getBoolean(
                 "slow-when-empty",
                 true
@@ -198,15 +223,7 @@ public final class FastMinecartsPlugin extends JavaPlugin implements Listener {
          *     blocks/sec^2 / 20 / 20
          *     = blocks/tick gained each tick
          */
-        maxSpeedPerTick =
-                speedBlocksPerSecond / TICKS_PER_SECOND;
-
-        maxSpeedPerTickSquared =
-                maxSpeedPerTick * maxSpeedPerTick;
-
-        accelerationPerTick =
-                accelerationBlocksPerSecondSquared
-                        / (TICKS_PER_SECOND * TICKS_PER_SECOND);
+        recalculateCachedSettings();
 
         /*
          * Write normalized values back to disk.
@@ -225,6 +242,11 @@ public final class FastMinecartsPlugin extends JavaPlugin implements Listener {
         );
 
         getConfig().set(
+                "curve-speed-blocks-per-second",
+                curveSpeedBlocksPerSecond
+        );
+
+        getConfig().set(
                 "slow-when-empty",
                 slowWhenEmpty
         );
@@ -235,6 +257,24 @@ public final class FastMinecartsPlugin extends JavaPlugin implements Listener {
         );
 
         saveConfig();
+    }
+
+    private void recalculateCachedSettings() {
+        maxSpeedPerTick =
+                speedBlocksPerSecond / TICKS_PER_SECOND;
+
+        maxSpeedPerTickSquared =
+                maxSpeedPerTick * maxSpeedPerTick;
+
+        accelerationPerTick =
+                accelerationBlocksPerSecondSquared
+                        / (TICKS_PER_SECOND * TICKS_PER_SECOND);
+
+        curveSpeedPerTick =
+                curveSpeedBlocksPerSecond / TICKS_PER_SECOND;
+
+        curveSpeedPerTickSquared =
+                curveSpeedPerTick * curveSpeedPerTick;
     }
 
     private double sanitizeSetting(
@@ -317,32 +357,13 @@ public final class FastMinecartsPlugin extends JavaPlugin implements Listener {
 
     /*
      * -------------------------------------------------------------------------
-     * Actual high-speed acceleration
+     * Actual high-speed acceleration and curve limiting
      * -------------------------------------------------------------------------
      */
 
     @EventHandler
     public void onVehicleMove(VehicleMoveEvent event) {
         if (!(event.getVehicle() instanceof Minecart minecart)) {
-            return;
-        }
-
-        /*
-         * Nothing useful to do when either target speed or acceleration is 0.
-         */
-        if (maxSpeedPerTick <= 0.0 || accelerationPerTick <= 0.0) {
-            return;
-        }
-
-        /*
-         * Check both ends of this movement.
-         *
-         * Checking the previous position as well helps at higher speeds where
-         * the minecart may already have moved beyond the powered rail by the
-         * time this event is processed.
-         */
-        if (!isBoostLocation(event.getTo())
-                && !isBoostLocation(event.getFrom())) {
             return;
         }
 
@@ -369,6 +390,30 @@ public final class FastMinecartsPlugin extends JavaPlugin implements Listener {
             return;
         }
 
+        if (shouldLimitForCurve(event, velocity, currentSpeedSquared)) {
+            limitVelocity(minecart, velocity, currentSpeedSquared, curveSpeedPerTick);
+            return;
+        }
+
+        /*
+         * Nothing useful to do when either target speed or acceleration is 0.
+         */
+        if (maxSpeedPerTick <= 0.0 || accelerationPerTick <= 0.0) {
+            return;
+        }
+
+        /*
+         * Check both ends of this movement.
+         *
+         * Checking the previous position as well helps at higher speeds where
+         * the minecart may already have moved beyond the powered rail by the
+         * time this event is processed.
+         */
+        if (!isBoostLocation(event.getTo())
+                && !isBoostLocation(event.getFrom())) {
+            return;
+        }
+
         /*
          * Already at or above our desired target.
          */
@@ -387,36 +432,12 @@ public final class FastMinecartsPlugin extends JavaPlugin implements Listener {
             return;
         }
 
-        /*
-         * Preserve Minecraft's calculated direction.
-         *
-         * This is important for:
-         * - corners
-         * - slopes
-         * - direction changes
-         *
-         * We increase only the magnitude of the velocity vector instead of
-         * deciding which direction the minecart should travel ourselves.
-         */
-        double multiplier = newSpeed / currentSpeed;
-
-        velocity.multiply(multiplier);
-
-        minecart.setVelocity(velocity);
+        scaleVelocity(minecart, velocity, newSpeed / currentSpeed);
     }
 
     private boolean isBoostLocation(Location location) {
-        Block block = location.getBlock();
-
-        /*
-         * Depending on the rail shape / minecart position, the rail can be
-         * either the block containing the minecart or the block directly below.
-         */
-        if (isBoostRail(block)) {
-            return true;
-        }
-
-        return isBoostRail(block.getRelative(BlockFace.DOWN));
+        Block rail = findAssociatedRail(location);
+        return rail != null && isBoostRail(rail);
     }
 
     private boolean isBoostRail(Block block) {
@@ -443,6 +464,175 @@ public final class FastMinecartsPlugin extends JavaPlugin implements Listener {
         return boostOnAllRails && Tag.RAILS.isTagged(material);
     }
 
+    private boolean shouldLimitForCurve(
+            VehicleMoveEvent event,
+            Vector velocity,
+            double currentSpeedSquared
+    ) {
+        if (curveSpeedPerTick < 0.0
+                || currentSpeedSquared <= curveSpeedPerTickSquared) {
+            return false;
+        }
+
+        Block toRail = findAssociatedRail(event.getTo());
+
+        if (isCurvedRail(toRail)) {
+            return true;
+        }
+
+        Block fromRail = findAssociatedRail(event.getFrom());
+
+        if (isCurvedRail(fromRail)) {
+            return true;
+        }
+
+        BlockFace travelFace = getPrimaryTravelFace(velocity);
+
+        if (travelFace == null) {
+            return false;
+        }
+
+        Block startRail = toRail != null ? toRail : fromRail;
+
+        if (startRail == null) {
+            return false;
+        }
+
+        int lookaheadBlocks = Math.min(
+                MAX_CURVE_LOOKAHEAD_BLOCKS,
+                (int) Math.ceil(Math.sqrt(currentSpeedSquared) * CURVE_LOOKAHEAD_TICKS)
+                        + CURVE_LOOKAHEAD_EXTRA_BLOCKS
+        );
+
+        Block scanRail = startRail;
+
+        for (int distance = 0; distance < lookaheadBlocks; distance++) {
+            Block nextBlock = scanRail.getRelative(travelFace);
+            Block nextRail = findRailNearTrajectory(nextBlock);
+
+            if (nextRail == null) {
+                scanRail = nextBlock;
+                continue;
+            }
+
+            if (isCurvedRail(nextRail)) {
+                return true;
+            }
+
+            scanRail = nextRail;
+        }
+
+        return false;
+    }
+
+    private Block findAssociatedRail(Location location) {
+        Block block = location.getBlock();
+
+        if (isRail(block)) {
+            return block;
+        }
+
+        Block below = block.getRelative(BlockFace.DOWN);
+
+        if (isRail(below)) {
+            return below;
+        }
+
+        return null;
+    }
+
+    private Block findRailNearTrajectory(Block block) {
+        if (isRail(block)) {
+            return block;
+        }
+
+        Block below = block.getRelative(BlockFace.DOWN);
+
+        if (isRail(below)) {
+            return below;
+        }
+
+        Block above = block.getRelative(BlockFace.UP);
+
+        if (isRail(above)) {
+            return above;
+        }
+
+        return null;
+    }
+
+    private boolean isRail(Block block) {
+        return Tag.RAILS.isTagged(block.getType());
+    }
+
+    private boolean isCurvedRail(Block block) {
+        if (block == null || !(block.getBlockData() instanceof Rail rail)) {
+            return false;
+        }
+
+        Rail.Shape shape = rail.getShape();
+
+        return shape == Rail.Shape.NORTH_EAST
+                || shape == Rail.Shape.NORTH_WEST
+                || shape == Rail.Shape.SOUTH_EAST
+                || shape == Rail.Shape.SOUTH_WEST;
+    }
+
+    private BlockFace getPrimaryTravelFace(Vector velocity) {
+        double x = velocity.getX();
+        double z = velocity.getZ();
+
+        if ((x * x) + (z * z) < MIN_VELOCITY_SQUARED) {
+            return null;
+        }
+
+        if (Math.abs(x) > Math.abs(z)) {
+            return x > 0.0 ? BlockFace.EAST : BlockFace.WEST;
+        }
+
+        return z > 0.0 ? BlockFace.SOUTH : BlockFace.NORTH;
+    }
+
+    private void limitVelocity(
+            Minecart minecart,
+            Vector velocity,
+            double currentSpeedSquared,
+            double targetSpeed
+    ) {
+        if (targetSpeed <= 0.0) {
+            minecart.setVelocity(new Vector(0.0, 0.0, 0.0));
+            return;
+        }
+
+        double currentSpeed = Math.sqrt(currentSpeedSquared);
+
+        if (currentSpeed <= targetSpeed) {
+            return;
+        }
+
+        scaleVelocity(minecart, velocity, targetSpeed / currentSpeed);
+    }
+
+    private void scaleVelocity(
+            Minecart minecart,
+            Vector velocity,
+            double multiplier
+    ) {
+        /*
+         * Preserve Minecraft's calculated direction.
+         *
+         * This is important for:
+         * - corners
+         * - slopes
+         * - direction changes
+         *
+         * We alter only the magnitude of the velocity vector instead of
+         * deciding which direction the minecart should travel ourselves.
+         */
+        velocity.multiply(multiplier);
+        minecart.setVelocity(velocity);
+    }
+
     /*
      * -------------------------------------------------------------------------
      * Command
@@ -467,9 +657,10 @@ public final class FastMinecartsPlugin extends JavaPlugin implements Listener {
 
             sender.sendMessage(String.format(
                     Locale.ROOT,
-                    "FastMinecarts reloaded. Speed: %.2f blocks/sec, acceleration: %.2f blocks/sec^2. Updated %d loaded minecart(s).",
+                    "FastMinecarts reloaded. Speed: %.2f blocks/sec, acceleration: %.2f blocks/sec^2, curve speed: %.2f blocks/sec. Updated %d loaded minecart(s).",
                     speedBlocksPerSecond,
                     accelerationBlocksPerSecondSquared,
+                    curveSpeedBlocksPerSecond,
                     changed
             ));
 
@@ -514,9 +705,7 @@ public final class FastMinecartsPlugin extends JavaPlugin implements Listener {
 
             accelerationBlocksPerSecondSquared = requestedAcceleration;
 
-            accelerationPerTick =
-                    accelerationBlocksPerSecondSquared
-                            / (TICKS_PER_SECOND * TICKS_PER_SECOND);
+            recalculateCachedSettings();
 
             getConfig().set(
                     "acceleration-blocks-per-second-squared",
@@ -529,6 +718,61 @@ public final class FastMinecartsPlugin extends JavaPlugin implements Listener {
                     Locale.ROOT,
                     "Minecart acceleration set to %.2f blocks/sec^2.",
                     accelerationBlocksPerSecondSquared
+            ));
+
+            return;
+        }
+
+        /*
+         * /minecartspeed curvespeed <number>
+         * /minecartspeed curve <number>
+         */
+        if (args[0].equalsIgnoreCase("curvespeed")
+                || args[0].equalsIgnoreCase("curve")) {
+
+            if (args.length != 2) {
+                sender.sendMessage(
+                        "Usage: /minecartspeed curvespeed <blocks/sec>"
+                );
+                return;
+            }
+
+            Double requestedCurveSpeed = parseNumber(
+                    sender,
+                    args[1],
+                    "Curve speed"
+            );
+
+            if (requestedCurveSpeed == null) {
+                return;
+            }
+
+            if (requestedCurveSpeed < 0.0
+                    || requestedCurveSpeed > MAX_ALLOWED_SPEED_BPS) {
+
+                sender.sendMessage(String.format(
+                        Locale.ROOT,
+                        "Curve speed must be between 0 and %.0f blocks/sec.",
+                        MAX_ALLOWED_SPEED_BPS
+                ));
+
+                return;
+            }
+
+            curveSpeedBlocksPerSecond = requestedCurveSpeed;
+            recalculateCachedSettings();
+
+            getConfig().set(
+                    "curve-speed-blocks-per-second",
+                    curveSpeedBlocksPerSecond
+            );
+
+            saveConfig();
+
+            sender.sendMessage(String.format(
+                    Locale.ROOT,
+                    "Minecart curve speed set to %.2f blocks/sec.",
+                    curveSpeedBlocksPerSecond
             ));
 
             return;
@@ -568,11 +812,7 @@ public final class FastMinecartsPlugin extends JavaPlugin implements Listener {
 
         speedBlocksPerSecond = requestedSpeed;
 
-        maxSpeedPerTick =
-                speedBlocksPerSecond / TICKS_PER_SECOND;
-
-        maxSpeedPerTickSquared =
-                maxSpeedPerTick * maxSpeedPerTick;
+        recalculateCachedSettings();
 
         getConfig().set(
                 "speed-blocks-per-second",
@@ -628,9 +868,10 @@ public final class FastMinecartsPlugin extends JavaPlugin implements Listener {
     private void sendStatus(CommandSender sender) {
         sender.sendMessage(String.format(
                 Locale.ROOT,
-                "Minecart speed: %.2f blocks/sec | Acceleration: %.2f blocks/sec^2 | Boost all rails: %s | Slow when empty: %s",
+                "Minecart speed: %.2f blocks/sec | Acceleration: %.2f blocks/sec^2 | Curve speed: %.2f blocks/sec | Boost all rails: %s | Slow when empty: %s",
                 speedBlocksPerSecond,
                 accelerationBlocksPerSecondSquared,
+                curveSpeedBlocksPerSecond,
                 boostOnAllRails,
                 slowWhenEmpty
         ));
@@ -640,7 +881,7 @@ public final class FastMinecartsPlugin extends JavaPlugin implements Listener {
 
     private void sendUsage(CommandSender sender) {
         sender.sendMessage(
-                "Usage: /minecartspeed <speed|reload|acceleration <value>>"
+                "Usage: /minecartspeed <speed|reload|acceleration <value>|curvespeed <value>>"
         );
     }
 
@@ -649,6 +890,7 @@ public final class FastMinecartsPlugin extends JavaPlugin implements Listener {
             return List.of(
                     "reload",
                     "acceleration",
+                    "curvespeed",
                     "8",
                     "16",
                     "24",
@@ -665,6 +907,7 @@ public final class FastMinecartsPlugin extends JavaPlugin implements Listener {
                     List.of(
                             "reload",
                             "acceleration",
+                            "curvespeed",
                             "8",
                             "16",
                             "24",
@@ -688,6 +931,22 @@ public final class FastMinecartsPlugin extends JavaPlugin implements Listener {
                             "80",
                             "160",
                             "320"
+                    )
+            );
+        }
+
+        if (args.length == 2
+                && (args[0].equalsIgnoreCase("curvespeed")
+                || args[0].equalsIgnoreCase("curve"))) {
+
+            return matchingSuggestions(
+                    args[1],
+                    List.of(
+                            "8",
+                            "10",
+                            "12",
+                            "14",
+                            "16"
                     )
             );
         }
