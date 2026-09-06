@@ -1,0 +1,21 @@
+# Vanilla minecart maximum speed:
+# 0.4 blocks/tick × 20 ticks/sec = 8 blocks/sec
+#speed-blocks-per-second: 8.0
+
+# 0 disables FastMinecarts' additional acceleration,
+# leaving acceleration entirely to vanilla Minecraft.
+#acceleration-blocks-per-second-squared: 0.0
+
+# Vanilla minecarts slow down more when empty.
+#slow-when-empty: true
+
+# Only relevant when custom acceleration is enabled.
+# false preserves normal rail behavior.
+#boost-on-all-rails: false
+
+
+# speed defaults
+speed-blocks-per-second: 40
+acceleration-blocks-per-second-squared: 60
+slow-when-empty: true
+boost-on-all-rails: false
