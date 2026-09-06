@@ -6,6 +6,10 @@ FastMinecarts only modifies minecarts while a player is riding them. Empty carts
 non-player passenger carts are restored to vanilla minecart settings and skipped by
 the movement logic.
 
+Rail look-ahead checks are cached by rail block and travel direction. The cache is
+bounded, expires automatically, and is invalidated near rails that are placed,
+broken, or updated by physics.
+
 ## Docker Paper Server
 
 Build and start a local Paper server with this plugin and WorldEdit:

@@ -18,6 +18,9 @@ import org.bukkit.entity.Minecart;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import org.bukkit.event.block.BlockBreakEvent;
+import org.bukkit.event.block.BlockPhysicsEvent;
+import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.vehicle.VehicleDestroyEvent;
 import org.bukkit.event.vehicle.VehicleEnterEvent;
 import org.bukkit.event.vehicle.VehicleExitEvent;
@@ -28,8 +31,11 @@ import org.bukkit.util.Vector;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -51,6 +57,8 @@ public final class FastMinecartsPlugin extends JavaPlugin implements Listener {
     private static final int CURVE_LOOKAHEAD_EXTRA_BLOCKS = 2;
     private static final int MAX_CURVE_LOOKAHEAD_BLOCKS = 64;
     private static final int POST_LIMIT_STRAIGHT_BLOCKS = 10;
+    private static final int GEOMETRY_CACHE_MAX_ENTRIES = 4096;
+    private static final long GEOMETRY_CACHE_TTL_MILLIS = 5000L;
 
     /*
      * Prevents attempting to normalize a velocity vector that is effectively zero.
@@ -84,6 +92,54 @@ public final class FastMinecartsPlugin extends JavaPlugin implements Listener {
     private double inclineSpeedPerTick;
 
     private final Set<UUID> geometryLimitedMinecarts = new HashSet<>();
+    private final Map<GeometryCacheKey, GeometryCacheEntry> geometryCache =
+            new LinkedHashMap<>(256, 0.75F, true) {
+
+                @Override
+                protected boolean removeEldestEntry(
+                        Map.Entry<GeometryCacheKey, GeometryCacheEntry> eldest
+                ) {
+                    return size() > GEOMETRY_CACHE_MAX_ENTRIES;
+                }
+            };
+
+    private enum GeometryKind {
+        CURVE,
+        INCLINE,
+        STRAIGHT
+    }
+
+    private record GeometryCacheKey(
+            UUID worldId,
+            int x,
+            int y,
+            int z,
+            BlockFace direction,
+            GeometryKind kind
+    ) {
+
+        private static GeometryCacheKey from(
+                Block block,
+                BlockFace direction,
+                GeometryKind kind
+        ) {
+            return new GeometryCacheKey(
+                    block.getWorld().getUID(),
+                    block.getX(),
+                    block.getY(),
+                    block.getZ(),
+                    direction,
+                    kind
+            );
+        }
+    }
+
+    private record GeometryCacheEntry(
+            double speedLimit,
+            int scannedBlocks,
+            long expiresAtMillis
+    ) {
+    }
 
     @Override
     public void onEnable() {
@@ -311,6 +367,8 @@ public final class FastMinecartsPlugin extends JavaPlugin implements Listener {
 
         inclineSpeedPerTick =
                 inclineSpeedBlocksPerSecond / TICKS_PER_SECOND;
+
+        geometryCache.clear();
     }
 
     private double sanitizeSetting(
@@ -591,6 +649,27 @@ public final class FastMinecartsPlugin extends JavaPlugin implements Listener {
         }
     }
 
+    @EventHandler
+    public void onBlockPlace(BlockPlaceEvent event) {
+        if (isRail(event.getBlock())) {
+            invalidateGeometryCacheNear(event.getBlock());
+        }
+    }
+
+    @EventHandler
+    public void onBlockBreak(BlockBreakEvent event) {
+        if (isRail(event.getBlock())) {
+            invalidateGeometryCacheNear(event.getBlock());
+        }
+    }
+
+    @EventHandler
+    public void onBlockPhysics(BlockPhysicsEvent event) {
+        if (isRail(event.getBlock())) {
+            invalidateGeometryCacheNear(event.getBlock());
+        }
+    }
+
     private boolean isBoostLocation(Location location) {
         Block rail = findAssociatedRail(location);
         return rail != null && isBoostRail(rail);
@@ -643,31 +722,13 @@ public final class FastMinecartsPlugin extends JavaPlugin implements Listener {
             return -1.0;
         }
 
-        int lookaheadBlocks = Math.min(
-                MAX_CURVE_LOOKAHEAD_BLOCKS,
-                (int) Math.ceil(Math.sqrt(currentSpeedSquared) * CURVE_LOOKAHEAD_TICKS)
-                        + CURVE_LOOKAHEAD_EXTRA_BLOCKS
+        int lookaheadBlocks = calculateLookaheadBlocks(currentSpeedSquared);
+        return findCachedGeometrySpeedLimit(
+                startRail,
+                travelFace,
+                lookaheadBlocks,
+                GeometryKind.CURVE
         );
-
-        Block scanRail = startRail;
-
-        for (int distance = 0; distance < lookaheadBlocks; distance++) {
-            Block nextBlock = scanRail.getRelative(travelFace);
-            Block nextRail = findRailNearTrajectory(nextBlock);
-
-            if (nextRail == null) {
-                scanRail = nextBlock;
-                continue;
-            }
-
-            if (isCurvedRail(nextRail)) {
-                return curveSpeedPerTick;
-            }
-
-            scanRail = nextRail;
-        }
-
-        return -1.0;
     }
 
     private double findInclineSpeedLimitAhead(
@@ -685,31 +746,13 @@ public final class FastMinecartsPlugin extends JavaPlugin implements Listener {
             return -1.0;
         }
 
-        int lookaheadBlocks = Math.min(
-                MAX_CURVE_LOOKAHEAD_BLOCKS,
-                (int) Math.ceil(Math.sqrt(currentSpeedSquared) * CURVE_LOOKAHEAD_TICKS)
-                        + CURVE_LOOKAHEAD_EXTRA_BLOCKS
+        int lookaheadBlocks = calculateLookaheadBlocks(currentSpeedSquared);
+        return findCachedGeometrySpeedLimit(
+                startRail,
+                travelFace,
+                lookaheadBlocks,
+                GeometryKind.INCLINE
         );
-
-        Block scanRail = startRail;
-
-        for (int distance = 0; distance < lookaheadBlocks; distance++) {
-            Block nextBlock = scanRail.getRelative(travelFace);
-            Block nextRail = findRailNearTrajectory(nextBlock);
-
-            if (nextRail == null) {
-                scanRail = nextBlock;
-                continue;
-            }
-
-            if (isInclineRail(nextRail)) {
-                return inclineSpeedPerTick;
-            }
-
-            scanRail = nextRail;
-        }
-
-        return -1.0;
     }
 
     private boolean hasStraightRailAhead(
@@ -733,6 +776,127 @@ public final class FastMinecartsPlugin extends JavaPlugin implements Listener {
             return false;
         }
 
+        return hasStraightRailAhead(startRail, travelFace, requiredBlocks);
+    }
+
+    private int calculateLookaheadBlocks(double currentSpeedSquared) {
+        return Math.min(
+                MAX_CURVE_LOOKAHEAD_BLOCKS,
+                (int) Math.ceil(Math.sqrt(currentSpeedSquared) * CURVE_LOOKAHEAD_TICKS)
+                        + CURVE_LOOKAHEAD_EXTRA_BLOCKS
+        );
+    }
+
+    private double findCachedGeometrySpeedLimit(
+            Block startRail,
+            BlockFace travelFace,
+            int lookaheadBlocks,
+            GeometryKind kind
+    ) {
+        GeometryCacheKey cacheKey = GeometryCacheKey.from(
+                startRail,
+                travelFace,
+                kind
+        );
+
+        long now = System.currentTimeMillis();
+        GeometryCacheEntry cachedEntry = geometryCache.get(cacheKey);
+
+        if (cachedEntry != null
+                && cachedEntry.expiresAtMillis() >= now
+                && cachedEntry.scannedBlocks() >= lookaheadBlocks) {
+            return cachedEntry.speedLimit();
+        }
+
+        double speedLimit = scanGeometrySpeedLimit(
+                startRail,
+                travelFace,
+                lookaheadBlocks,
+                kind
+        );
+
+        geometryCache.put(
+                cacheKey,
+                new GeometryCacheEntry(
+                        speedLimit,
+                        lookaheadBlocks,
+                        now + GEOMETRY_CACHE_TTL_MILLIS
+                )
+        );
+
+        return speedLimit;
+    }
+
+    private double scanGeometrySpeedLimit(
+            Block startRail,
+            BlockFace travelFace,
+            int lookaheadBlocks,
+            GeometryKind kind
+    ) {
+        Block scanRail = startRail;
+
+        for (int distance = 0; distance < lookaheadBlocks; distance++) {
+            Block nextBlock = scanRail.getRelative(travelFace);
+            Block nextRail = findRailNearTrajectory(nextBlock);
+
+            if (nextRail == null) {
+                scanRail = nextBlock;
+                continue;
+            }
+
+            if (matchesGeometryKind(nextRail, kind)) {
+                return geometrySpeedLimit(kind);
+            }
+
+            scanRail = nextRail;
+        }
+
+        return -1.0;
+    }
+
+    private boolean hasStraightRailAhead(
+            Block startRail,
+            BlockFace travelFace,
+            int requiredBlocks
+    ) {
+        GeometryCacheKey cacheKey = GeometryCacheKey.from(
+                startRail,
+                travelFace,
+                GeometryKind.STRAIGHT
+        );
+
+        long now = System.currentTimeMillis();
+        GeometryCacheEntry cachedEntry = geometryCache.get(cacheKey);
+
+        if (cachedEntry != null
+                && cachedEntry.expiresAtMillis() >= now
+                && cachedEntry.scannedBlocks() >= requiredBlocks) {
+            return cachedEntry.speedLimit() > 0.0;
+        }
+
+        boolean hasStraightRail = scanStraightRailAhead(
+                startRail,
+                travelFace,
+                requiredBlocks
+        );
+
+        geometryCache.put(
+                cacheKey,
+                new GeometryCacheEntry(
+                        hasStraightRail ? 1.0 : -1.0,
+                        requiredBlocks,
+                        now + GEOMETRY_CACHE_TTL_MILLIS
+                )
+        );
+
+        return hasStraightRail;
+    }
+
+    private boolean scanStraightRailAhead(
+            Block startRail,
+            BlockFace travelFace,
+            int requiredBlocks
+    ) {
         Block scanRail = startRail;
 
         for (int distance = 0; distance < requiredBlocks; distance++) {
@@ -749,6 +913,22 @@ public final class FastMinecartsPlugin extends JavaPlugin implements Listener {
         return true;
     }
 
+    private boolean matchesGeometryKind(Block block, GeometryKind kind) {
+        return switch (kind) {
+            case CURVE -> isCurvedRail(block);
+            case INCLINE -> isInclineRail(block);
+            case STRAIGHT -> false;
+        };
+    }
+
+    private double geometrySpeedLimit(GeometryKind kind) {
+        return switch (kind) {
+            case CURVE -> curveSpeedPerTick;
+            case INCLINE -> inclineSpeedPerTick;
+            case STRAIGHT -> -1.0;
+        };
+    }
+
     private void clearGeometryLimitedStateIfOffRail(
             Minecart minecart,
             VehicleMoveEvent event
@@ -756,6 +936,33 @@ public final class FastMinecartsPlugin extends JavaPlugin implements Listener {
         if (findAssociatedRail(event.getTo()) == null
                 && findAssociatedRail(event.getFrom()) == null) {
             geometryLimitedMinecarts.remove(minecart.getUniqueId());
+        }
+    }
+
+    private void invalidateGeometryCacheNear(Block changedBlock) {
+        if (geometryCache.isEmpty()) {
+            return;
+        }
+
+        UUID worldId = changedBlock.getWorld().getUID();
+        int x = changedBlock.getX();
+        int y = changedBlock.getY();
+        int z = changedBlock.getZ();
+
+        Iterator<GeometryCacheKey> iterator = geometryCache.keySet().iterator();
+
+        while (iterator.hasNext()) {
+            GeometryCacheKey key = iterator.next();
+
+            if (!key.worldId().equals(worldId)) {
+                continue;
+            }
+
+            if (Math.abs(key.x() - x) <= MAX_CURVE_LOOKAHEAD_BLOCKS
+                    && Math.abs(key.y() - y) <= 2
+                    && Math.abs(key.z() - z) <= MAX_CURVE_LOOKAHEAD_BLOCKS) {
+                iterator.remove();
+            }
         }
     }
 
