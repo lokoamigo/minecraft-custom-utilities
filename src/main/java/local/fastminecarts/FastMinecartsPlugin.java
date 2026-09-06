@@ -13,10 +13,14 @@ import org.bukkit.block.BlockFace;
 import org.bukkit.block.data.Powerable;
 import org.bukkit.block.data.Rail;
 import org.bukkit.command.CommandSender;
+import org.bukkit.entity.Entity;
 import org.bukkit.entity.Minecart;
+import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.vehicle.VehicleDestroyEvent;
+import org.bukkit.event.vehicle.VehicleEnterEvent;
+import org.bukkit.event.vehicle.VehicleExitEvent;
 import org.bukkit.event.vehicle.VehicleMoveEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.util.Vector;
@@ -37,6 +41,8 @@ public final class FastMinecartsPlugin extends JavaPlugin implements Listener {
     private static final double DEFAULT_ACCELERATION_BPS2 = 0.0;
     private static final double DEFAULT_CURVE_SPEED_BPS = 8.0;
     private static final double DEFAULT_INCLINE_SPEED_BPS = 8.0;
+    private static final double VANILLA_MAX_SPEED_PER_TICK =
+            DEFAULT_SPEED_BPS / TICKS_PER_SECOND;
 
     private static final double MAX_ALLOWED_SPEED_BPS = 1000.0;
     private static final double MAX_ALLOWED_ACCELERATION_BPS2 = 10000.0;
@@ -343,7 +349,27 @@ public final class FastMinecartsPlugin extends JavaPlugin implements Listener {
     @EventHandler
     public void onEntityAddedToWorld(EntityAddToWorldEvent event) {
         if (event.getEntity() instanceof Minecart minecart) {
+            applyMinecartSettingsForPassengers(minecart);
+        }
+    }
+
+    @EventHandler
+    public void onVehicleEnter(VehicleEnterEvent event) {
+        if (event.getVehicle() instanceof Minecart minecart
+                && event.getEntered() instanceof Player) {
             applyMinecartSettings(minecart);
+        }
+    }
+
+    @EventHandler
+    public void onVehicleExit(VehicleExitEvent event) {
+        if (event.getVehicle() instanceof Minecart minecart
+                && event.getExited() instanceof Player) {
+            Bukkit.getScheduler().runTask(this, () -> {
+                if (!hasPlayerPassenger(minecart)) {
+                    restoreVanillaMinecartSettings(minecart);
+                }
+            });
         }
     }
 
@@ -367,6 +393,43 @@ public final class FastMinecartsPlugin extends JavaPlugin implements Listener {
         return changed;
     }
 
+    private boolean applyMinecartSettingsForPassengers(Minecart minecart) {
+        if (hasPlayerPassenger(minecart)) {
+            return applyMinecartSettings(minecart);
+        }
+
+        geometryLimitedMinecarts.remove(minecart.getUniqueId());
+        return restoreVanillaMinecartSettings(minecart);
+    }
+
+    private boolean restoreVanillaMinecartSettings(Minecart minecart) {
+        boolean changed = false;
+
+        if (Math.abs(minecart.getMaxSpeed() - VANILLA_MAX_SPEED_PER_TICK) > 1.0E-9) {
+            minecart.setMaxSpeed(VANILLA_MAX_SPEED_PER_TICK);
+            changed = true;
+        }
+
+        if (!minecart.isSlowWhenEmpty()) {
+            minecart.setSlowWhenEmpty(true);
+            changed = true;
+        }
+
+        geometryLimitedMinecarts.remove(minecart.getUniqueId());
+
+        return changed;
+    }
+
+    private boolean hasPlayerPassenger(Minecart minecart) {
+        for (Entity passenger : minecart.getPassengers()) {
+            if (passenger instanceof Player) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private int applyToAllLoadedMinecarts() {
         int changed = 0;
 
@@ -376,7 +439,7 @@ public final class FastMinecartsPlugin extends JavaPlugin implements Listener {
              * every entity on the server with instanceof.
              */
             for (Minecart minecart : world.getEntitiesByClass(Minecart.class)) {
-                if (applyMinecartSettings(minecart)) {
+                if (applyMinecartSettingsForPassengers(minecart)) {
                     changed++;
                 }
             }
@@ -396,6 +459,13 @@ public final class FastMinecartsPlugin extends JavaPlugin implements Listener {
         if (!(event.getVehicle() instanceof Minecart minecart)) {
             return;
         }
+
+        if (!hasPlayerPassenger(minecart)) {
+            restoreVanillaMinecartSettings(minecart);
+            return;
+        }
+
+        applyMinecartSettings(minecart);
 
         Vector velocity = minecart.getVelocity();
 

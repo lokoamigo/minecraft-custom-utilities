@@ -2,6 +2,10 @@
 
 Paper plugin that raises minecart speed and caps high-speed carts before rail curves.
 
+FastMinecarts only modifies minecarts while a player is riding them. Empty carts and
+non-player passenger carts are restored to vanilla minecart settings and skipped by
+the movement logic.
+
 ## Docker Paper Server
 
 Build and start a local Paper server with this plugin and WorldEdit:
