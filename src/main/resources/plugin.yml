@@ -4,6 +4,11 @@ main: local.fastminecarts.FastMinecartsPlugin
 description: Raises the maximum speed of player-ridden minecarts without enabling Minecart Improvements.
 api-version: '26.3'
 
+commands:
+  elytraslot:
+    description: Opens your additional Elytra equipment slot.
+    usage: /elytraslot
+
 permissions:
   fastminecarts.admin:
     description: Allows changing and reloading FastMinecarts settings.
