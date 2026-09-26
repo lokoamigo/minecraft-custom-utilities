@@ -15,6 +15,8 @@ public final class FastMinecartsPlugin extends JavaPlugin {
         RailGeometry geometry = new RailGeometry(settings);
         MinecartController controller = new MinecartController(this, settings, geometry);
         Bukkit.getPluginManager().registerEvents(controller, this);
+        GhastController ghastController = new GhastController(this);
+        Bukkit.getPluginManager().registerEvents(ghastController, this);
         registerCommand("minecartspeed", "Configure FastMinecarts",
                 new MinecartSpeedCommand(settings, controller, geometry));
 
@@ -23,6 +25,7 @@ public final class FastMinecartsPlugin extends JavaPlugin {
                 "Enabled. Target speed: %.2f blocks/sec, acceleration: %.2f blocks/sec^2, curve speed: %.2f blocks/sec. Updated %d loaded minecart(s).",
                 settings.speedBlocksPerSecond(), settings.accelerationBlocksPerSecondSquared(),
                 settings.curveSpeedBlocksPerSecond(), changed));
+        getLogger().info("Faster Ghasts enabled for " + ghastController.trackedGhasts() + " loaded Ghast(s).");
         if (settings.speedBlocksPerSecond() > 100.0) {
             getLogger().warning("Minecart speeds above 100 blocks/sec can cause chunk-loading, collision, or visual problems. Use extreme speeds carefully.");
         }

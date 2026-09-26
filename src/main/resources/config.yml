@@ -23,3 +23,9 @@ acceleration-blocks-per-second-squared: 0.0
 curve-speed-blocks-per-second: 12.0
 slow-when-empty: true
 boost-on-all-rails: false
+
+# Ghasts accelerate toward this travel speed while their AI is moving them.
+ghast-speed-blocks-per-second: 20.0
+
+# A low value gives Ghasts time to build up to their maximum speed.
+ghast-acceleration-blocks-per-second-squared: 2.0
