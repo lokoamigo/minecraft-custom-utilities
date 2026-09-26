@@ -10,6 +10,9 @@ Detector rails and activator rails are treated as vanilla-speed rail sections. W
 one is under or ahead of a player-ridden cart, the plugin caps velocity to vanilla
 minecart speed and then leaves rail physics alone.
 
+Ascending and descending rails always use vanilla minecart speed and physics,
+regardless of the configured straight-track speed or acceleration.
+
 Rail look-ahead checks are cached by rail block and travel direction. The cache is
 bounded, expires automatically, and is invalidated near rails that are placed,
 broken, or updated by physics.
@@ -56,6 +59,5 @@ Plugin tuning from the server console or RCON:
 minecartspeed <speed>
 minecartspeed acceleration <value>
 minecartspeed curvespeed <value>
-minecartspeed inclinespeed <value>
 minecartspeed reload
 ```

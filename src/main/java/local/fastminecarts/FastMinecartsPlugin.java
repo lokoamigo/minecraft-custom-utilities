@@ -46,7 +46,6 @@ public final class FastMinecartsPlugin extends JavaPlugin implements Listener {
     private static final double DEFAULT_SPEED_BPS = 8.0;
     private static final double DEFAULT_ACCELERATION_BPS2 = 0.0;
     private static final double DEFAULT_CURVE_SPEED_BPS = 8.0;
-    private static final double DEFAULT_INCLINE_SPEED_BPS = 8.0;
     private static final double VANILLA_MAX_SPEED_PER_TICK =
             DEFAULT_SPEED_BPS / TICKS_PER_SECOND;
 
@@ -74,7 +73,6 @@ public final class FastMinecartsPlugin extends JavaPlugin implements Listener {
     private double speedBlocksPerSecond;
     private double accelerationBlocksPerSecondSquared;
     private double curveSpeedBlocksPerSecond;
-    private double inclineSpeedBlocksPerSecond;
 
     private boolean slowWhenEmpty;
     private boolean boostOnAllRails;
@@ -89,7 +87,6 @@ public final class FastMinecartsPlugin extends JavaPlugin implements Listener {
     private double maxSpeedPerTickSquared;
     private double accelerationPerTick;
     private double curveSpeedPerTick;
-    private double inclineSpeedPerTick;
 
     private final Set<UUID> geometryLimitedMinecarts = new HashSet<>();
     private final Map<GeometryCacheKey, GeometryCacheEntry> geometryCache =
@@ -178,11 +175,10 @@ public final class FastMinecartsPlugin extends JavaPlugin implements Listener {
 
         getLogger().info(String.format(
                 Locale.ROOT,
-                "Enabled. Target speed: %.2f blocks/sec, acceleration: %.2f blocks/sec^2, curve speed: %.2f blocks/sec, incline speed: %.2f blocks/sec. Updated %d loaded minecart(s).",
+                "Enabled. Target speed: %.2f blocks/sec, acceleration: %.2f blocks/sec^2, curve speed: %.2f blocks/sec. Updated %d loaded minecart(s).",
                 speedBlocksPerSecond,
                 accelerationBlocksPerSecondSquared,
                 curveSpeedBlocksPerSecond,
-                inclineSpeedBlocksPerSecond,
                 changed
         ));
 
@@ -218,11 +214,6 @@ public final class FastMinecartsPlugin extends JavaPlugin implements Listener {
         getConfig().addDefault(
                 "curve-speed-blocks-per-second",
                 DEFAULT_CURVE_SPEED_BPS
-        );
-
-        getConfig().addDefault(
-                "incline-speed-blocks-per-second",
-                DEFAULT_INCLINE_SPEED_BPS
         );
 
         /*
@@ -281,16 +272,6 @@ public final class FastMinecartsPlugin extends JavaPlugin implements Listener {
                 MAX_ALLOWED_SPEED_BPS
         );
 
-        inclineSpeedBlocksPerSecond = sanitizeSetting(
-                "incline-speed-blocks-per-second",
-                getConfig().getDouble(
-                        "incline-speed-blocks-per-second",
-                        DEFAULT_INCLINE_SPEED_BPS
-                ),
-                DEFAULT_INCLINE_SPEED_BPS,
-                MAX_ALLOWED_SPEED_BPS
-        );
-
         slowWhenEmpty = getConfig().getBoolean(
                 "slow-when-empty",
                 true
@@ -334,10 +315,8 @@ public final class FastMinecartsPlugin extends JavaPlugin implements Listener {
                 curveSpeedBlocksPerSecond
         );
 
-        getConfig().set(
-                "incline-speed-blocks-per-second",
-                inclineSpeedBlocksPerSecond
-        );
+        // Remove the retired setting from configs created by older versions.
+        getConfig().set("incline-speed-blocks-per-second", null);
 
         getConfig().set(
                 "slow-when-empty",
@@ -365,9 +344,6 @@ public final class FastMinecartsPlugin extends JavaPlugin implements Listener {
 
         curveSpeedPerTick =
                 curveSpeedBlocksPerSecond / TICKS_PER_SECOND;
-
-        inclineSpeedPerTick =
-                inclineSpeedBlocksPerSecond / TICKS_PER_SECOND;
 
         geometryCache.clear();
     }
@@ -526,6 +502,18 @@ public final class FastMinecartsPlugin extends JavaPlugin implements Listener {
 
         applyMinecartSettings(minecart);
 
+        /*
+         * Once a cart is on an ascending rail, stop touching its velocity.
+         * In particular, this lets vanilla powered-rail physics launch and
+         * accelerate carts uphill instead of having that change immediately
+         * scaled away by the plugin's slope speed limiter.
+         */
+        if (isOnIncline(event)) {
+            geometryLimitedMinecarts.add(minecart.getUniqueId());
+            minecart.setMaxSpeed(VANILLA_MAX_SPEED_PER_TICK);
+            return;
+        }
+
         Vector velocity = minecart.getVelocity();
 
         double currentSpeedSquared = velocity.lengthSquared();
@@ -592,10 +580,6 @@ public final class FastMinecartsPlugin extends JavaPlugin implements Listener {
             return;
         }
 
-        if (isOnIncline(event)) {
-            return;
-        }
-
         double inclineSpeedLimit = findInclineSpeedLimitAhead(
                 event,
                 travelFace,
@@ -604,6 +588,9 @@ public final class FastMinecartsPlugin extends JavaPlugin implements Listener {
 
         if (inclineSpeedLimit >= 0.0) {
             geometryLimitedMinecarts.add(minecart.getUniqueId());
+
+            // Brake before the slope; on the slope itself vanilla takes over.
+            minecart.setMaxSpeed(VANILLA_MAX_SPEED_PER_TICK);
 
             if (currentSpeedSquared > inclineSpeedLimit * inclineSpeedLimit) {
                 limitVelocity(minecart, velocity, currentSpeedSquared, inclineSpeedLimit);
@@ -758,10 +745,13 @@ public final class FastMinecartsPlugin extends JavaPlugin implements Listener {
             BlockFace travelFace,
             double currentSpeedSquared
     ) {
-        Block startRail = findAssociatedRail(event.getTo());
+        Block toRail = findAssociatedRail(event.getTo());
+        Block fromRail = findAssociatedRail(event.getFrom());
+
+        Block startRail = toRail;
 
         if (startRail == null) {
-            startRail = findAssociatedRail(event.getFrom());
+            startRail = fromRail;
         }
 
         if (startRail == null) {
@@ -980,7 +970,7 @@ public final class FastMinecartsPlugin extends JavaPlugin implements Listener {
     private double geometrySpeedLimit(GeometryKind kind) {
         return switch (kind) {
             case CURVE -> curveSpeedPerTick;
-            case INCLINE -> inclineSpeedPerTick;
+            case INCLINE -> VANILLA_MAX_SPEED_PER_TICK;
             case VANILLA_RAIL -> VANILLA_MAX_SPEED_PER_TICK;
             case STRAIGHT -> -1.0;
         };
@@ -1206,11 +1196,10 @@ public final class FastMinecartsPlugin extends JavaPlugin implements Listener {
 
             sender.sendMessage(String.format(
                     Locale.ROOT,
-                    "FastMinecarts reloaded. Speed: %.2f blocks/sec, acceleration: %.2f blocks/sec^2, curve speed: %.2f blocks/sec, incline speed: %.2f blocks/sec. Updated %d loaded minecart(s).",
+                    "FastMinecarts reloaded. Speed: %.2f blocks/sec, acceleration: %.2f blocks/sec^2, curve speed: %.2f blocks/sec. Updated %d loaded minecart(s).",
                     speedBlocksPerSecond,
                     accelerationBlocksPerSecondSquared,
                     curveSpeedBlocksPerSecond,
-                    inclineSpeedBlocksPerSecond,
                     changed
             ));
 
@@ -1329,61 +1318,6 @@ public final class FastMinecartsPlugin extends JavaPlugin implements Listener {
         }
 
         /*
-         * /minecartspeed inclinespeed <number>
-         * /minecartspeed incline <number>
-         */
-        if (args[0].equalsIgnoreCase("inclinespeed")
-                || args[0].equalsIgnoreCase("incline")) {
-
-            if (args.length != 2) {
-                sender.sendMessage(
-                        "Usage: /minecartspeed inclinespeed <blocks/sec>"
-                );
-                return;
-            }
-
-            Double requestedInclineSpeed = parseNumber(
-                    sender,
-                    args[1],
-                    "Incline speed"
-            );
-
-            if (requestedInclineSpeed == null) {
-                return;
-            }
-
-            if (requestedInclineSpeed < 0.0
-                    || requestedInclineSpeed > MAX_ALLOWED_SPEED_BPS) {
-
-                sender.sendMessage(String.format(
-                        Locale.ROOT,
-                        "Incline speed must be between 0 and %.0f blocks/sec.",
-                        MAX_ALLOWED_SPEED_BPS
-                ));
-
-                return;
-            }
-
-            inclineSpeedBlocksPerSecond = requestedInclineSpeed;
-            recalculateCachedSettings();
-
-            getConfig().set(
-                    "incline-speed-blocks-per-second",
-                    inclineSpeedBlocksPerSecond
-            );
-
-            saveConfig();
-
-            sender.sendMessage(String.format(
-                    Locale.ROOT,
-                    "Minecart incline speed set to %.2f blocks/sec.",
-                    inclineSpeedBlocksPerSecond
-            ));
-
-            return;
-        }
-
-        /*
          * Normal syntax remains backwards-compatible:
          *
          * /minecartspeed 32
@@ -1473,11 +1407,10 @@ public final class FastMinecartsPlugin extends JavaPlugin implements Listener {
     private void sendStatus(CommandSender sender) {
         sender.sendMessage(String.format(
                 Locale.ROOT,
-                "Minecart speed: %.2f blocks/sec | Acceleration: %.2f blocks/sec^2 | Curve speed: %.2f blocks/sec | Incline speed: %.2f blocks/sec | Boost all rails: %s | Slow when empty: %s",
+                "Minecart speed: %.2f blocks/sec | Acceleration: %.2f blocks/sec^2 | Curve speed: %.2f blocks/sec | Slopes: vanilla | Boost all rails: %s | Slow when empty: %s",
                 speedBlocksPerSecond,
                 accelerationBlocksPerSecondSquared,
                 curveSpeedBlocksPerSecond,
-                inclineSpeedBlocksPerSecond,
                 boostOnAllRails,
                 slowWhenEmpty
         ));
@@ -1487,7 +1420,7 @@ public final class FastMinecartsPlugin extends JavaPlugin implements Listener {
 
     private void sendUsage(CommandSender sender) {
         sender.sendMessage(
-                "Usage: /minecartspeed <speed|reload|acceleration <value>|curvespeed <value>|inclinespeed <value>>"
+                "Usage: /minecartspeed <speed|reload|acceleration <value>|curvespeed <value>>"
         );
     }
 
@@ -1497,7 +1430,6 @@ public final class FastMinecartsPlugin extends JavaPlugin implements Listener {
                     "reload",
                     "acceleration",
                     "curvespeed",
-                    "inclinespeed",
                     "8",
                     "16",
                     "24",
@@ -1515,7 +1447,6 @@ public final class FastMinecartsPlugin extends JavaPlugin implements Listener {
                             "reload",
                             "acceleration",
                             "curvespeed",
-                            "inclinespeed",
                             "8",
                             "16",
                             "24",
@@ -1546,22 +1477,6 @@ public final class FastMinecartsPlugin extends JavaPlugin implements Listener {
         if (args.length == 2
                 && (args[0].equalsIgnoreCase("curvespeed")
                 || args[0].equalsIgnoreCase("curve"))) {
-
-            return matchingSuggestions(
-                    args[1],
-                    List.of(
-                            "8",
-                            "10",
-                            "12",
-                            "14",
-                            "16"
-                    )
-            );
-        }
-
-        if (args.length == 2
-                && (args[0].equalsIgnoreCase("inclinespeed")
-                || args[0].equalsIgnoreCase("incline"))) {
 
             return matchingSuggestions(
                     args[1],
