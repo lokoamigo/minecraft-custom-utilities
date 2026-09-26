@@ -28,7 +28,7 @@ docker compose up --build
 The compose setup:
 
 - builds `FastMinecarts.jar` from the current source using Java 25
-- starts Paper `26.2` by default
+- starts the experimental Paper `26.3` line by default
 - installs WorldEdit from Modrinth at container startup
 - stores the Minecraft world and server files in the `paper-data` Docker volume
 - exposes Minecraft on `localhost:25565`

@@ -11,7 +11,7 @@ services:
     environment:
       EULA: "TRUE"
       TYPE: "PAPER"
-      VERSION: "${MC_VERSION:-26.2}"
+      VERSION: "${MC_VERSION:-26.3}"
       MEMORY: "${MC_MEMORY:-2G}"
       MOTD: "FastMinecarts + WorldEdit"
       ENABLE_RCON: "true"
@@ -19,6 +19,7 @@ services:
       RCON_PORT: "25575"
       MODRINTH_PROJECTS: |
         worldedit
+      MODRINTH_ALLOWED_VERSION_TYPE: "beta"
       MODRINTH_DOWNLOAD_DEPENDENCIES: "required"
     volumes:
       - paper-data:/data
