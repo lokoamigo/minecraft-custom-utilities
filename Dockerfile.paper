@@ -2,10 +2,12 @@ FROM maven:3.9-eclipse-temurin-25 AS plugin-build
 
 WORKDIR /workspace
 
+ARG APP_VERSION=1.1.0-SNAPSHOT
+
 COPY pom.xml .
 COPY src ./src
 
-RUN mvn -q package
+RUN mvn -q -Drevision="${APP_VERSION}" package
 
 FROM itzg/minecraft-server:java25
 

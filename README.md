@@ -61,3 +61,26 @@ minecartspeed acceleration <value>
 minecartspeed curvespeed <value>
 minecartspeed reload
 ```
+
+## Versioning
+
+The default development version is defined by the `revision` property in
+`pom.xml`. Maven injects it into `plugin.yml` and the JAR manifest so the build
+and the version reported by Paper cannot drift apart.
+
+Build the current development version:
+
+```sh
+make package
+make version
+```
+
+Build a specific release version locally:
+
+```sh
+mvn -Drevision=1.2.3 clean package
+APP_VERSION=1.2.3 docker compose up --build -d
+```
+
+Pushing a tag such as `v1.2.3` creates an immutable GitHub release and embeds
+`1.2.3` in its plugin JAR. Branch builds retain the configured snapshot version.

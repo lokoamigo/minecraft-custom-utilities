@@ -1,8 +1,8 @@
 name: FastMinecarts
-version: 1.0.0
+version: '${project.version}'
 main: local.fastminecarts.FastMinecartsPlugin
 description: Raises the maximum speed of player-ridden minecarts without enabling Minecart Improvements.
-api-version: '26.2'
+api-version: '26.3'
 
 permissions:
   fastminecarts.admin:
