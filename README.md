@@ -1,8 +1,8 @@
-# FastMinecarts
+# Minecraft Custom Utilities
 
 Paper plugin that raises minecart speed and caps high-speed carts before rail curves.
 
-FastMinecarts only modifies minecarts while a player is riding them. Empty carts and
+Minecraft Custom Utilities only modifies minecarts while a player is riding them. Empty carts and
 non-player passenger carts are restored to vanilla minecart settings and skipped by
 the movement logic.
 
@@ -51,7 +51,7 @@ docker compose up --build
 
 The compose setup:
 
-- builds `FastMinecarts.jar` from the current source using Java 25
+- builds `MinecraftCustomUtilities.jar` from the current source using Java 25
 - starts the experimental Paper `26.3` line by default
 - installs WorldEdit from Modrinth at container startup
 - stores the Minecraft world and server files in the `paper-data` Docker volume
@@ -102,5 +102,5 @@ make version
 
 Before releasing, update `pom.xml`, `Dockerfile.paper`, and
 `docker-compose.yml` to the same exact version and commit them together.
-Pushing a matching tag such as `v1.3.2` creates the GitHub release. The release
+Pushing a matching tag such as `v1.3.3` creates the GitHub release. The release
 workflow fails if the tag and POM versions differ.

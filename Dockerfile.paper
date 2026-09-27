@@ -2,7 +2,7 @@ FROM maven:3.9-eclipse-temurin-25 AS plugin-build
 
 WORKDIR /workspace
 
-ARG APP_VERSION=1.3.2
+ARG APP_VERSION=1.3.3
 
 COPY pom.xml .
 COPY src ./src
@@ -11,4 +11,4 @@ RUN mvn -q -Drevision="${APP_VERSION}" package
 
 FROM itzg/minecraft-server:java25
 
-COPY --from=plugin-build /workspace/target/FastMinecarts.jar /plugins/FastMinecarts.jar
+COPY --from=plugin-build /workspace/target/MinecraftCustomUtilities.jar /plugins/MinecraftCustomUtilities.jar

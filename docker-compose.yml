@@ -4,9 +4,9 @@ services:
       context: .
       dockerfile: Dockerfile.paper
       args:
-        APP_VERSION: "${APP_VERSION:-1.3.2}"
-    image: fastminecarts-paper:local
-    container_name: fastminecarts-paper
+        APP_VERSION: "${APP_VERSION:-1.3.3}"
+    image: minecraft-custom-utilities-paper:local
+    container_name: minecraft-custom-utilities-paper
     restart: unless-stopped
     ports:
       - "${MC_PORT:-25565}:25565"
@@ -15,9 +15,9 @@ services:
       TYPE: "PAPER"
       VERSION: "${MC_VERSION:-26.3}"
       MEMORY: "${MC_MEMORY:-2G}"
-      MOTD: "FastMinecarts + WorldEdit"
+      MOTD: "Minecraft Custom Utilities + WorldEdit"
       ENABLE_RCON: "true"
-      RCON_PASSWORD: "${RCON_PASSWORD:-fastminecarts}"
+      RCON_PASSWORD: "${RCON_PASSWORD:-minecraft-custom-utilities}"
       RCON_PORT: "25575"
       MODRINTH_PROJECTS: |
         worldedit

@@ -33,7 +33,7 @@ final class MinecartSpeedCommand implements BasicCommand {
             geometry.clearCache();
             int changed = controller.applyToAllLoadedMinecarts();
             sender.sendMessage(String.format(Locale.ROOT,
-                    "FastMinecarts reloaded. Speed: %.2f blocks/sec, acceleration: %.2f blocks/sec^2, curve speed: %.2f blocks/sec. Updated %d loaded minecart(s).",
+                    "Minecraft Custom Utilities reloaded. Speed: %.2f blocks/sec, acceleration: %.2f blocks/sec^2, curve speed: %.2f blocks/sec. Updated %d loaded minecart(s).",
                     settings.speedBlocksPerSecond(), settings.accelerationBlocksPerSecondSquared(),
                     settings.curveSpeedBlocksPerSecond(), changed));
         } else if (args[0].equalsIgnoreCase("acceleration") || args[0].equalsIgnoreCase("accel")) {

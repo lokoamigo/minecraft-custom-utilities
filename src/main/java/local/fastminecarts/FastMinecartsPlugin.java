@@ -22,7 +22,7 @@ public final class FastMinecartsPlugin extends JavaPlugin {
         Bukkit.getPluginManager().registerEvents(ghastController, this);
         elytraSlot = new ElytraSlotController(this);
         Bukkit.getPluginManager().registerEvents(elytraSlot, this);
-        registerCommand("minecartspeed", "Configure FastMinecarts",
+        registerCommand("minecartspeed", "Configure Minecraft Custom Utilities",
                 new MinecartSpeedCommand(settings, controller, geometry));
         registerCommand("ghastspeed", "Configure ridden Happy Ghast speed",
                 new GhastSpeedCommand(ghastController));

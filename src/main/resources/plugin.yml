@@ -1,4 +1,4 @@
-name: FastMinecarts
+name: MinecraftCustomUtilities
 version: '${project.version}'
 main: local.fastminecarts.FastMinecartsPlugin
 description: Raises the maximum speed of player-ridden minecarts without enabling Minecart Improvements.
@@ -11,5 +11,5 @@ commands:
 
 permissions:
   fastminecarts.admin:
-    description: Allows changing and reloading FastMinecarts settings.
+    description: Allows changing and reloading Minecraft Custom Utilities settings.
     default: op
