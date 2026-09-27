@@ -88,23 +88,19 @@ minecartspeed reload
 
 ## Versioning
 
-The default development version is defined by the `revision` property in
-`pom.xml`. Maven injects it into `plugin.yml` and the JAR manifest so the build
-and the version reported by Paper cannot drift apart.
+The canonical version is defined by the `revision` property in `pom.xml`.
+Maven injects it into `plugin.yml` and the JAR manifest so the build and the
+version reported by Paper cannot drift apart. The Docker build defaults must
+use the same version.
 
-Build the current development version:
+Build the current version:
 
 ```sh
 make package
 make version
 ```
 
-Build a specific release version locally:
-
-```sh
-mvn -Drevision=1.2.3 clean package
-APP_VERSION=1.2.3 docker compose up --build -d
-```
-
-Pushing a tag such as `v1.2.3` creates an immutable GitHub release and embeds
-`1.2.3` in its plugin JAR. Branch builds retain the configured snapshot version.
+Before releasing, update `pom.xml`, `Dockerfile.paper`, and
+`docker-compose.yml` to the same exact version and commit them together.
+Pushing a matching tag such as `v1.3.2` creates the GitHub release. The release
+workflow fails if the tag and POM versions differ.
