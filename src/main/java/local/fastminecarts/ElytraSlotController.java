@@ -1,12 +1,15 @@
 package local.fastminecarts;
 
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.ExperienceOrb;
+import org.bukkit.entity.HappyGhast;
 import org.bukkit.entity.Player;
+import org.bukkit.entity.Vehicle;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
@@ -18,8 +21,10 @@ import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerExpChangeEvent;
 import org.bukkit.event.player.PlayerInputEvent;
+import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.player.PlayerItemMendEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.vehicle.VehicleEnterEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
@@ -35,13 +40,16 @@ import java.util.UUID;
 
 final class ElytraSlotController implements Listener {
     private static final int SLOT = 4;
+    private static final int STATUS_SEGMENTS = 10;
     private static final Component TITLE = Component.text("Elytra Slot");
     private static final NamespacedKey LEGACY_STORED_ELYTRA_KEY =
             Objects.requireNonNull(NamespacedKey.fromString("fastminecarts:elytra_slot"));
 
     private final MinecraftCustomUtilitiesPlugin plugin;
     private final NamespacedKey storedElytraKey;
+    private final Set<UUID> forcedGlideStops = new HashSet<>();
     private final Set<UUID> jumpHeld = new HashSet<>();
+    private final Set<UUID> statusVisible = new HashSet<>();
 
     ElytraSlotController(MinecraftCustomUtilitiesPlugin plugin) {
         this.plugin = plugin;
@@ -92,7 +100,10 @@ final class ElytraSlotController implements Listener {
 
     @EventHandler
     public void onQuit(PlayerQuitEvent event) {
-        jumpHeld.remove(event.getPlayer().getUniqueId());
+        UUID playerId = event.getPlayer().getUniqueId();
+        forcedGlideStops.remove(playerId);
+        jumpHeld.remove(playerId);
+        statusVisible.remove(playerId);
     }
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
@@ -100,8 +111,28 @@ final class ElytraSlotController implements Listener {
         if (!(event.getEntity() instanceof Player player) || event.isGliding()) {
             return;
         }
+        if (forcedGlideStops.contains(player.getUniqueId())) {
+            hideStatus(player);
+            return;
+        }
         if (canGlide(player)) {
             event.setCancelled(true);
+            return;
+        }
+        hideStatus(player);
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    public void onVehicleInteract(PlayerInteractEntityEvent event) {
+        if (event.getRightClicked() instanceof Vehicle) {
+            stopGlidingForVehicle(event.getPlayer());
+        }
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    public void onVehicleEnter(VehicleEnterEvent event) {
+        if (event.getEntered() instanceof Player player) {
+            stopGlidingForVehicle(player);
         }
     }
 
@@ -229,13 +260,17 @@ final class ElytraSlotController implements Listener {
     private void tickGlidingPlayers() {
         for (Player player : Bukkit.getOnlinePlayers()) {
             if (!player.isGliding()) {
+                hideStatus(player);
                 continue;
             }
             if (hasVanillaElytraEquipped(player)) {
+                showStatus(player, player.getInventory().getItem(EquipmentSlot.CHEST));
+                statusVisible.add(player.getUniqueId());
                 continue;
             }
             if (!canGlide(player)) {
                 player.setGliding(false);
+                hideStatus(player);
                 continue;
             }
 
@@ -245,14 +280,18 @@ final class ElytraSlotController implements Listener {
                 holder.inventory.setItem(SLOT, damaged);
             }
             save(player, damaged);
+            showStatus(player, damaged);
+            statusVisible.add(player.getUniqueId());
             if (!hasUsableElytra(player)) {
                 player.setGliding(false);
+                hideStatus(player);
             }
         }
     }
 
     private boolean canGlide(Player player) {
         return !hasVanillaElytraEquipped(player)
+                && !isUsingVehicle(player)
                 && !player.getAllowFlight()
                 && !player.isFlying()
                 && !player.isOnGround()
@@ -261,13 +300,69 @@ final class ElytraSlotController implements Listener {
                 && hasUsableElytra(player);
     }
 
+    private static boolean isUsingVehicle(Player player) {
+        if (player.isInsideVehicle()) {
+            return true;
+        }
+
+        // Paper 26.3 does not expose Happy Ghast attachments through
+        // Player#getVehicle(), so use the same narrow positional fallback as
+        // GhastController until the attachment is available through the API.
+        return player.getWorld().getNearbyEntities(player.getLocation(), 1.0, 1.0, 1.0,
+                        entity -> entity instanceof HappyGhast)
+                .stream()
+                .anyMatch(entity -> entity.getLocation().distanceSquared(player.getLocation()) < 1.0);
+    }
+
     private static boolean hasVanillaElytraEquipped(Player player) {
         ItemStack chestItem = player.getInventory().getItem(EquipmentSlot.CHEST);
         return !isEmpty(chestItem) && chestItem.getType() == Material.ELYTRA;
     }
 
     void shutdown() {
+        forcedGlideStops.clear();
         jumpHeld.clear();
+        statusVisible.clear();
+    }
+
+    private void stopGlidingForVehicle(Player player) {
+        if (!player.isGliding()) {
+            return;
+        }
+
+        UUID playerId = player.getUniqueId();
+        forcedGlideStops.add(playerId);
+        try {
+            player.setGliding(false);
+        } finally {
+            forcedGlideStops.remove(playerId);
+        }
+        hideStatus(player);
+    }
+
+    private void hideStatus(Player player) {
+        if (statusVisible.remove(player.getUniqueId())) {
+            player.sendActionBar(Component.empty());
+        }
+    }
+
+    private static void showStatus(Player player, ItemStack item) {
+        Damageable damageable = (Damageable) item.getItemMeta();
+        int maximum = damageable.hasMaxDamage() ? damageable.getMaxDamage() : item.getType().getMaxDurability();
+        int remaining = Math.max(0, maximum - damageable.getDamage());
+        int percentage = maximum == 0 ? 0 : (int) ((long) remaining * 100 / maximum);
+        int filledSegments = maximum == 0 ? 0
+                : Math.min(STATUS_SEGMENTS,
+                        (int) (((long) remaining * STATUS_SEGMENTS + maximum - 1) / maximum));
+        NamedTextColor statusColor = percentage > 50 ? NamedTextColor.GREEN
+                : percentage >= 25 ? NamedTextColor.YELLOW : NamedTextColor.RED;
+
+        Component status = Component.text("Elytra  ", NamedTextColor.GRAY)
+                .append(Component.text("█".repeat(filledSegments), statusColor))
+                .append(Component.text("░".repeat(STATUS_SEGMENTS - filledSegments), NamedTextColor.DARK_GRAY))
+                .append(Component.text("  " + percentage + "% (" + remaining + "/" + maximum + ")",
+                        statusColor));
+        player.sendActionBar(status);
     }
 
     private boolean hasUsableElytra(Player player) {

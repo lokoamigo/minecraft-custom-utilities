@@ -39,7 +39,8 @@ while gliding, and can consume collected experience through Mending. It drops wi
 the player's other inventory on death, unless
 `keepInventory` is enabled. Because this is a server-only plugin, the additional
 slot uses a small command-opened inventory instead of changing the client inventory
-screen.
+screen. While gliding with either a chest-slot or additional Elytra, a color-coded
+durability meter appears in the action bar above the hotbar.
 
 ## Docker Paper Server
 
