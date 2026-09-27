@@ -31,7 +31,8 @@ Players can wear chest armor and use an Elytra at the same time:
 
 1. Run `/elytraslot` and place an Elytra in the center slot.
 2. Equip chest armor normally.
-3. Crouch while falling to start gliding.
+3. Jump, then press jump again while airborne to start gliding. Crouching while
+   falling also works as a fallback.
 
 The Elytra is stored persistently on the player and takes normal durability damage
 while gliding. It drops with the player's other inventory on death, unless
