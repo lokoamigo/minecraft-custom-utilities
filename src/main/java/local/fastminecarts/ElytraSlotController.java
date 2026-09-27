@@ -253,6 +253,8 @@ final class ElytraSlotController implements Listener {
 
     private boolean canGlide(Player player) {
         return !hasVanillaElytraEquipped(player)
+                && !player.getAllowFlight()
+                && !player.isFlying()
                 && !player.isOnGround()
                 && !player.isSwimming()
                 && !player.isClimbing()
