@@ -46,6 +46,14 @@ durability meter appears in the action bar above the hotbar.
 
 Operators can run `/killphantoms [radius]` to kill all phantoms near themselves.
 The radius defaults to 64 blocks and can be set to any value up to 256 blocks.
+## Lectern Book Editing
+
+Sneak-right-click a lectern holding a writable book to edit it without taking it
+off the lectern. The usual right-click action still reads the book. Only one player
+can edit a lectern at a time; its book cannot be removed or its lectern broken while
+an edit is open. Changes are saved when the player clicks Done or signs the book;
+cancelling leaves the lectern unchanged. The `minecraftcustomutilities.lecternedit`
+permission is granted to everyone by default.
 
 ## Docker Paper Server
 

@@ -26,3 +26,6 @@ permissions:
   fastminecarts.admin:
     description: Allows changing and reloading Minecraft Custom Utilities settings.
     default: op
+  minecraftcustomutilities.lecternedit:
+    description: Allows editing writable books directly on lecterns while sneaking.
+    default: true

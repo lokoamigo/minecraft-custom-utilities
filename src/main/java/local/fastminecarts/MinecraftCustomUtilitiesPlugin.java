@@ -9,6 +9,7 @@ public final class MinecraftCustomUtilitiesPlugin extends JavaPlugin {
     private GhastController ghastController;
     private ElytraSlotController elytraSlot;
     private QuickOpenController quickOpen;
+    private LecternBookEditor lecternBookEditor;
 
     @Override
     public void onEnable() {
@@ -25,6 +26,8 @@ public final class MinecraftCustomUtilitiesPlugin extends JavaPlugin {
         Bukkit.getPluginManager().registerEvents(elytraSlot, this);
         quickOpen = new QuickOpenController(this);
         Bukkit.getPluginManager().registerEvents(quickOpen, this);
+        lecternBookEditor = new LecternBookEditor(this);
+        Bukkit.getPluginManager().registerEvents(lecternBookEditor, this);
         registerCommand("minecartspeed", "Configure Minecraft Custom Utilities",
                 new MinecartSpeedCommand(settings, controller, geometry));
         registerCommand("ghastspeed", "Configure ridden Happy Ghast speed",
@@ -62,6 +65,9 @@ public final class MinecraftCustomUtilitiesPlugin extends JavaPlugin {
         }
         if (quickOpen != null) {
             quickOpen.shutdown();
+        }
+        if (lecternBookEditor != null) {
+            lecternBookEditor.shutdown();
         }
     }
 }
