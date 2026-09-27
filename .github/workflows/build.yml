@@ -13,7 +13,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: minecraft-custom-utilities-latest
+  group: minecraft-custom-utilities-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -37,31 +37,21 @@ jobs:
           VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
 
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
-            TAG_VERSION="${GITHUB_REF_NAME#v}"
-            if [[ "$TAG_VERSION" != "$VERSION" ]]; then
-              echo "Release tag version $TAG_VERSION does not match pom.xml version $VERSION."
-              exit 1
-            fi
+            ./scripts/verify-release.sh "$GITHUB_REF_NAME"
+          else
+            ./scripts/verify-release.sh
           fi
 
           echo "APP_VERSION=$VERSION" >> "$GITHUB_ENV"
-          mvn --batch-mode clean package
 
       - name: Prepare MinecraftCustomUtilities.jar
         shell: bash
         run: |
           mkdir -p dist
 
-          JAR=$(find target \
-            -maxdepth 1 \
-            -type f \
-            -name "*.jar" \
-            ! -name "*-sources.jar" \
-            ! -name "*-javadoc.jar" \
-            ! -name "original-*.jar" \
-            | head -n 1)
+          JAR=target/MinecraftCustomUtilities.jar
 
-          if [ -z "$JAR" ]; then
+          if [ ! -f "$JAR" ]; then
             echo "Could not find built plugin JAR."
             exit 1
           fi
