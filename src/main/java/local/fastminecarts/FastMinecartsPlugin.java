@@ -7,6 +7,7 @@ import java.util.Locale;
 
 public final class FastMinecartsPlugin extends JavaPlugin {
     private GhastController ghastController;
+    private ElytraSlotController elytraSlot;
 
     @Override
     public void onEnable() {
@@ -19,10 +20,14 @@ public final class FastMinecartsPlugin extends JavaPlugin {
         Bukkit.getPluginManager().registerEvents(controller, this);
         ghastController = new GhastController(this);
         Bukkit.getPluginManager().registerEvents(ghastController, this);
+        elytraSlot = new ElytraSlotController(this);
+        Bukkit.getPluginManager().registerEvents(elytraSlot, this);
         registerCommand("minecartspeed", "Configure FastMinecarts",
                 new MinecartSpeedCommand(settings, controller, geometry));
         registerCommand("ghastspeed", "Configure ridden Happy Ghast speed",
                 new GhastSpeedCommand(ghastController));
+        registerCommand("elytraslot", "Open your additional Elytra slot",
+                new ElytraSlotCommand(elytraSlot));
 
         int changed = controller.applyToAllLoadedMinecarts();
         getLogger().info(String.format(Locale.ROOT,
@@ -40,6 +45,9 @@ public final class FastMinecartsPlugin extends JavaPlugin {
     public void onDisable() {
         if (ghastController != null) {
             ghastController.shutdown();
+        }
+        if (elytraSlot != null) {
+            elytraSlot.shutdown();
         }
     }
 }
