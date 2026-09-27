@@ -17,6 +17,14 @@ Rail look-ahead checks are cached by rail block and travel direction. The cache 
 bounded, expires automatically, and is invalidated near rails that are placed,
 broken, or updated by physics.
 
+Happy Ghasts accelerate gradually while a player is riding them. Unridden Happy
+Ghasts and hostile Ghasts retain vanilla movement. The ridden maximum speed and
+acceleration can be changed with `/ghastspeed <speed>` and
+`/ghastspeed acceleration <value>`, or with the corresponding settings in
+`config.yml`. The default maximum is 200 blocks per second with an acceleration of
+1 block per second squared. A mount
+that stops, collides, or loses its rider builds speed from the beginning again.
+
 ## Docker Paper Server
 
 Build and start a local Paper server with this plugin and WorldEdit:

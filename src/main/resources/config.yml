@@ -23,3 +23,9 @@ acceleration-blocks-per-second-squared: 0.0
 curve-speed-blocks-per-second: 12.0
 slow-when-empty: true
 boost-on-all-rails: false
+
+# Happy Ghasts accelerate toward this speed only while ridden by a player.
+ghast-speed-blocks-per-second: 200.0
+
+# A low value gives Ghasts time to build up to their maximum speed.
+ghast-acceleration-blocks-per-second-squared: 1.0
