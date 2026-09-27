@@ -100,7 +100,7 @@ final class ElytraSlotController implements Listener {
         if (!(event.getEntity() instanceof Player player) || event.isGliding()) {
             return;
         }
-        if (!player.isOnGround() && !player.isSwimming() && !player.isClimbing() && hasUsableElytra(player)) {
+        if (canGlide(player)) {
             event.setCancelled(true);
         }
     }
@@ -231,6 +231,9 @@ final class ElytraSlotController implements Listener {
             if (!player.isGliding()) {
                 continue;
             }
+            if (hasVanillaElytraEquipped(player)) {
+                continue;
+            }
             if (!canGlide(player)) {
                 player.setGliding(false);
                 continue;
@@ -249,7 +252,16 @@ final class ElytraSlotController implements Listener {
     }
 
     private boolean canGlide(Player player) {
-        return !player.isOnGround() && !player.isSwimming() && !player.isClimbing() && hasUsableElytra(player);
+        return !hasVanillaElytraEquipped(player)
+                && !player.isOnGround()
+                && !player.isSwimming()
+                && !player.isClimbing()
+                && hasUsableElytra(player);
+    }
+
+    private static boolean hasVanillaElytraEquipped(Player player) {
+        ItemStack chestItem = player.getInventory().getItem(EquipmentSlot.CHEST);
+        return !isEmpty(chestItem) && chestItem.getType() == Material.ELYTRA;
     }
 
     void shutdown() {
