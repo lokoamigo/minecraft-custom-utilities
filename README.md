@@ -34,8 +34,9 @@ Players can wear chest armor and use an Elytra at the same time:
 3. Jump, then press jump again while airborne to start gliding. Crouching while
    falling also works as a fallback.
 
-The Elytra is stored persistently on the player and takes normal durability damage
-while gliding. It drops with the player's other inventory on death, unless
+The Elytra is stored persistently on the player, takes normal durability damage
+while gliding, and can consume collected experience through Mending. It drops with
+the player's other inventory on death, unless
 `keepInventory` is enabled. Because this is a server-only plugin, the additional
 slot uses a small command-opened inventory instead of changing the client inventory
 screen.

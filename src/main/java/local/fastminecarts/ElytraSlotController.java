@@ -5,6 +5,8 @@ import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
+import org.bukkit.enchantments.Enchantment;
+import org.bukkit.entity.ExperienceOrb;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -15,6 +17,8 @@ import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
+import org.bukkit.event.player.PlayerExpChangeEvent;
+import org.bukkit.event.player.PlayerItemMendEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerRespawnEvent;
@@ -22,6 +26,7 @@ import org.bukkit.event.player.PlayerToggleFlightEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.meta.Damageable;
 import org.bukkit.persistence.PersistentDataType;
 
@@ -194,6 +199,44 @@ final class ElytraSlotController implements Listener {
         }
     }
 
+    @EventHandler(priority = EventPriority.HIGH)
+    public void onExperience(PlayerExpChangeEvent event) {
+        if (!(event.getSource() instanceof ExperienceOrb experienceOrb) || event.getAmount() <= 0) {
+            return;
+        }
+
+        Player player = event.getPlayer();
+        ItemStack elytra = currentItem(player);
+        if (isEmpty(elytra) || !elytra.containsEnchantment(Enchantment.MENDING)
+                || !(elytra.getItemMeta() instanceof Damageable damageable)
+                || damageable.getDamage() <= 0) {
+            return;
+        }
+
+        int availableExperience = event.getAmount();
+        int maximumRepair = availableExperience > Integer.MAX_VALUE / 2
+                ? Integer.MAX_VALUE : availableExperience * 2;
+        int offeredRepair = Math.min(damageable.getDamage(), maximumRepair);
+        int offeredConsumption = offeredRepair / 2;
+        PlayerItemMendEvent mendEvent = new PlayerItemMendEvent(player, elytra, EquipmentSlot.CHEST,
+                experienceOrb, offeredRepair, offeredConsumption);
+        Bukkit.getPluginManager().callEvent(mendEvent);
+        if (mendEvent.isCancelled()) {
+            return;
+        }
+
+        int repair = Math.max(0, Math.min(damageable.getDamage(),
+                Math.min(maximumRepair, mendEvent.getRepairAmount())));
+        if (repair == 0) {
+            return;
+        }
+        int consumedExperience = repair / 2;
+        damageable.setDamage(damageable.getDamage() - repair);
+        elytra.setItemMeta(damageable);
+        updateStoredItem(player, elytra);
+        event.setAmount(availableExperience - consumedExperience);
+    }
+
     private void tickGlidingPlayers() {
         for (Player player : Bukkit.getOnlinePlayers()) {
             if (!player.isGliding()) {
@@ -270,6 +313,14 @@ final class ElytraSlotController implements Listener {
             return holder.inventory.getItem(SLOT);
         }
         return load(player);
+    }
+
+    private void updateStoredItem(Player player, ItemStack item) {
+        if (player.getOpenInventory().getTopInventory().getHolder(false) instanceof ElytraInventory holder
+                && holder.owner.equals(player.getUniqueId())) {
+            holder.inventory.setItem(SLOT, item);
+        }
+        save(player, item);
     }
 
     private ItemStack load(Player player) {
