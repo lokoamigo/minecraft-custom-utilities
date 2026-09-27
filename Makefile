@@ -1,5 +1,9 @@
 COMPOSE ?= docker compose
+DOCKER ?= docker
 SERVICE ?= paper
+LEGACY_CONTAINER ?= fastminecarts-paper
+LEGACY_PLUGIN_JAR ?= /data/plugins/FastMinecarts.jar
+PAPER_DATA_VOLUME ?= mc-faster-minecarts_paper-data
 
 .PHONY: help version package verify-release restart-test-server up down logs status plugins
 
@@ -26,9 +30,14 @@ verify-release:
 	./scripts/verify-release.sh
 
 restart-test-server:
-	$(COMPOSE) up --build -d $(SERVICE)
+	$(DOCKER) volume create $(PAPER_DATA_VOLUME)
+	$(COMPOSE) build $(SERVICE)
+	-$(DOCKER) rm --force $(LEGACY_CONTAINER)
+	$(COMPOSE) run --rm --no-deps --entrypoint rm $(SERVICE) -f $(LEGACY_PLUGIN_JAR)
+	$(COMPOSE) up -d --force-recreate $(SERVICE)
 
 up:
+	$(DOCKER) volume create $(PAPER_DATA_VOLUME)
 	$(COMPOSE) up -d $(SERVICE)
 
 down:

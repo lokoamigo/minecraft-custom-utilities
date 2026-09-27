@@ -29,18 +29,21 @@ import org.bukkit.persistence.PersistentDataType;
 
 import java.util.Arrays;
 import java.util.HashSet;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 
 final class ElytraSlotController implements Listener {
     private static final int SLOT = 4;
     private static final Component TITLE = Component.text("Elytra Slot");
+    private static final NamespacedKey LEGACY_STORED_ELYTRA_KEY =
+            Objects.requireNonNull(NamespacedKey.fromString("fastminecarts:elytra_slot"));
 
-    private final FastMinecartsPlugin plugin;
+    private final MinecraftCustomUtilitiesPlugin plugin;
     private final NamespacedKey storedElytraKey;
     private final Set<UUID> jumpHeld = new HashSet<>();
 
-    ElytraSlotController(FastMinecartsPlugin plugin) {
+    ElytraSlotController(MinecraftCustomUtilitiesPlugin plugin) {
         this.plugin = plugin;
         this.storedElytraKey = new NamespacedKey(plugin, "elytra_slot");
 
@@ -281,12 +284,25 @@ final class ElytraSlotController implements Listener {
 
     private ItemStack load(Player player) {
         byte[] bytes = player.getPersistentDataContainer().get(storedElytraKey, PersistentDataType.BYTE_ARRAY);
+        boolean legacy = false;
+        if (bytes == null || bytes.length == 0) {
+            bytes = player.getPersistentDataContainer().get(LEGACY_STORED_ELYTRA_KEY,
+                    PersistentDataType.BYTE_ARRAY);
+            legacy = bytes != null && bytes.length > 0;
+        }
         if (bytes == null || bytes.length == 0) {
             return null;
         }
         try {
             ItemStack item = ItemStack.deserializeBytes(bytes);
-            return item.getType() == Material.ELYTRA ? item : null;
+            if (item.getType() != Material.ELYTRA) {
+                return null;
+            }
+            if (legacy) {
+                player.getPersistentDataContainer().set(storedElytraKey, PersistentDataType.BYTE_ARRAY, bytes);
+                player.getPersistentDataContainer().remove(LEGACY_STORED_ELYTRA_KEY);
+            }
+            return item;
         } catch (RuntimeException exception) {
             plugin.getLogger().warning("Could not load the Elytra slot for " + player.getName() + ": " + exception.getMessage());
             return null;

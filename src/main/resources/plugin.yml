@@ -1,6 +1,6 @@
 name: MinecraftCustomUtilities
 version: '${project.version}'
-main: local.fastminecarts.FastMinecartsPlugin
+main: local.fastminecarts.MinecraftCustomUtilitiesPlugin
 description: Raises the maximum speed of player-ridden minecarts without enabling Minecart Improvements.
 api-version: '26.3'
 

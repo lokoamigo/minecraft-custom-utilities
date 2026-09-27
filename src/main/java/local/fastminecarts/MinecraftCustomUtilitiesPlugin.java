@@ -5,7 +5,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 import java.util.Locale;
 
-public final class FastMinecartsPlugin extends JavaPlugin {
+public final class MinecraftCustomUtilitiesPlugin extends JavaPlugin {
     private GhastController ghastController;
     private ElytraSlotController elytraSlot;
 

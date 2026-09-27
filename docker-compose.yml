@@ -30,3 +30,6 @@ services:
 
 volumes:
   paper-data:
+    # Retain the data created under the repository's former Compose project name.
+    name: mc-faster-minecarts_paper-data
+    external: true

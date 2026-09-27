@@ -25,10 +25,10 @@ These instructions apply to the entire repository.
 
 ## Compatibility
 
-- The `local.fastminecarts` Java package, `FastMinecartsPlugin` main class, and
-  `fastminecarts.admin` permission are legacy compatibility identifiers. Do not
-  rename them merely for branding consistency; a migration must be deliberate and
-  account for server configuration and permissions.
+- The `local.fastminecarts` Java package and `fastminecarts.admin` permission are
+  legacy compatibility identifiers. Do not rename them merely for branding
+  consistency; a migration must be deliberate and account for server configuration
+  and permissions.
 - Preserve existing command names and configuration keys unless a change explicitly
   requires a migration.
 

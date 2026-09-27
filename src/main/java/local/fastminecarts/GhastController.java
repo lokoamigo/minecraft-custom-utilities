@@ -26,12 +26,12 @@ final class GhastController implements Listener {
     private static final double DEFAULT_ACCELERATION_BPS2 = 1.0;
     private static final double VANILLA_RIDDEN_SPEED_BPS = 4.0;
 
-    private final FastMinecartsPlugin plugin;
+    private final MinecraftCustomUtilitiesPlugin plugin;
     private final Map<UUID, GhastState> ghasts = new HashMap<>();
     private double speedBlocksPerSecond;
     private double accelerationBlocksPerSecondSquared;
 
-    GhastController(FastMinecartsPlugin plugin) {
+    GhastController(MinecraftCustomUtilitiesPlugin plugin) {
         this.plugin = plugin;
         plugin.getConfig().addDefault("ghast-speed-blocks-per-second", DEFAULT_SPEED_BPS);
         plugin.getConfig().addDefault("ghast-acceleration-blocks-per-second-squared", DEFAULT_ACCELERATION_BPS2);
@@ -157,11 +157,11 @@ final class GhastController implements Listener {
         });
     }
 
-    private static double positiveSetting(FastMinecartsPlugin plugin, String key, double fallback) {
+    private static double positiveSetting(MinecraftCustomUtilitiesPlugin plugin, String key, double fallback) {
         return positiveSetting(plugin, key, fallback, MAX_ALLOWED_ACCELERATION_BPS2);
     }
 
-    private static double positiveSetting(FastMinecartsPlugin plugin, String key, double fallback, double maximum) {
+    private static double positiveSetting(MinecraftCustomUtilitiesPlugin plugin, String key, double fallback, double maximum) {
         double value = plugin.getConfig().getDouble(key, fallback);
         if (Double.isFinite(value) && value > 0.0 && value <= maximum) {
             return value;
