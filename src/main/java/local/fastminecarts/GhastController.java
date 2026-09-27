@@ -7,6 +7,7 @@ import org.bukkit.attribute.AttributeInstance;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.HappyGhast;
 import org.bukkit.entity.Player;
+import org.bukkit.Material;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntitySpawnEvent;
@@ -24,25 +25,32 @@ final class GhastController implements Listener {
     static final double MAX_ALLOWED_ACCELERATION_BPS2 = 100.0;
     private static final double DEFAULT_SPEED_BPS = 200.0;
     private static final double DEFAULT_ACCELERATION_BPS2 = 1.0;
+    private static final double DEFAULT_FIREWORK_ACCELERATION_MULTIPLIER = 4.0;
     private static final double VANILLA_RIDDEN_SPEED_BPS = 4.0;
 
     private final MinecraftCustomUtilitiesPlugin plugin;
     private final Map<UUID, GhastState> ghasts = new HashMap<>();
     private double speedBlocksPerSecond;
     private double accelerationBlocksPerSecondSquared;
+    private double fireworkAccelerationMultiplier;
 
     GhastController(MinecraftCustomUtilitiesPlugin plugin) {
         this.plugin = plugin;
         plugin.getConfig().addDefault("ghast-speed-blocks-per-second", DEFAULT_SPEED_BPS);
         plugin.getConfig().addDefault("ghast-acceleration-blocks-per-second-squared", DEFAULT_ACCELERATION_BPS2);
+        plugin.getConfig().addDefault("ghast-firework-acceleration-multiplier",
+                DEFAULT_FIREWORK_ACCELERATION_MULTIPLIER);
         plugin.getConfig().options().copyDefaults(true);
 
         speedBlocksPerSecond = positiveSetting(plugin, "ghast-speed-blocks-per-second",
                 DEFAULT_SPEED_BPS, MAX_ALLOWED_SPEED_BPS);
         accelerationBlocksPerSecondSquared = positiveSetting(plugin,
                 "ghast-acceleration-blocks-per-second-squared", DEFAULT_ACCELERATION_BPS2);
+        fireworkAccelerationMultiplier = positiveSetting(plugin,
+                "ghast-firework-acceleration-multiplier", DEFAULT_FIREWORK_ACCELERATION_MULTIPLIER);
         plugin.getConfig().set("ghast-speed-blocks-per-second", speedBlocksPerSecond);
         plugin.getConfig().set("ghast-acceleration-blocks-per-second-squared", accelerationBlocksPerSecondSquared);
+        plugin.getConfig().set("ghast-firework-acceleration-multiplier", fireworkAccelerationMultiplier);
         plugin.saveConfig();
 
         for (World world : Bukkit.getWorlds()) {
@@ -134,8 +142,12 @@ final class GhastController implements Listener {
 
             double currentRamp = state.rampSpeedBlocksPerSecond == 0.0
                     ? VANILLA_RIDDEN_SPEED_BPS : state.rampSpeedBlocksPerSecond;
+            double acceleration = accelerationBlocksPerSecondSquared;
+            if (isHoldingFireworkRocket(rider)) {
+                acceleration *= fireworkAccelerationMultiplier;
+            }
             state.rampSpeedBlocksPerSecond = Math.min(speedBlocksPerSecond,
-                    currentRamp + accelerationBlocksPerSecondSquared / TICKS_PER_SECOND);
+                    currentRamp + acceleration / TICKS_PER_SECOND);
             state.applyRiddenSpeed(state.rampSpeedBlocksPerSecond);
         }
     }
@@ -199,6 +211,11 @@ final class GhastController implements Listener {
                 || player.getCurrentInput().isRight()
                 || player.getCurrentInput().isJump()
                 || player.getCurrentInput().isSneak();
+    }
+
+    private static boolean isHoldingFireworkRocket(Player player) {
+        return player.getInventory().getItemInMainHand().getType() == Material.FIREWORK_ROCKET
+                || player.getInventory().getItemInOffHand().getType() == Material.FIREWORK_ROCKET;
     }
 
     private static final class GhastState {
