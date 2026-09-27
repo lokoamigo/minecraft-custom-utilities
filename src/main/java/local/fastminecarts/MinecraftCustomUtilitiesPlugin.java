@@ -8,6 +8,7 @@ import java.util.Locale;
 public final class MinecraftCustomUtilitiesPlugin extends JavaPlugin {
     private GhastController ghastController;
     private ElytraSlotController elytraSlot;
+    private LecternBookEditor lecternBookEditor;
 
     @Override
     public void onEnable() {
@@ -22,6 +23,8 @@ public final class MinecraftCustomUtilitiesPlugin extends JavaPlugin {
         Bukkit.getPluginManager().registerEvents(ghastController, this);
         elytraSlot = new ElytraSlotController(this);
         Bukkit.getPluginManager().registerEvents(elytraSlot, this);
+        lecternBookEditor = new LecternBookEditor(this);
+        Bukkit.getPluginManager().registerEvents(lecternBookEditor, this);
         registerCommand("minecartspeed", "Configure Minecraft Custom Utilities",
                 new MinecartSpeedCommand(settings, controller, geometry));
         registerCommand("ghastspeed", "Configure ridden Happy Ghast speed",
@@ -48,6 +51,9 @@ public final class MinecraftCustomUtilitiesPlugin extends JavaPlugin {
         }
         if (elytraSlot != null) {
             elytraSlot.shutdown();
+        }
+        if (lecternBookEditor != null) {
+            lecternBookEditor.shutdown();
         }
     }
 }
