@@ -2,7 +2,6 @@ package local.fastminecarts;
 
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
-import org.bukkit.GameMode;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.enchantments.Enchantment;
@@ -18,11 +17,9 @@ import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerExpChangeEvent;
+import org.bukkit.event.player.PlayerInputEvent;
 import org.bukkit.event.player.PlayerItemMendEvent;
-import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
-import org.bukkit.event.player.PlayerRespawnEvent;
-import org.bukkit.event.player.PlayerToggleFlightEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
@@ -41,7 +38,7 @@ final class ElytraSlotController implements Listener {
 
     private final FastMinecartsPlugin plugin;
     private final NamespacedKey storedElytraKey;
-    private final Set<UUID> temporarilyFlightEnabled = new HashSet<>();
+    private final Set<UUID> jumpHeld = new HashSet<>();
 
     ElytraSlotController(FastMinecartsPlugin plugin) {
         this.plugin = plugin;
@@ -60,11 +57,7 @@ final class ElytraSlotController implements Listener {
     public void onMove(PlayerMoveEvent event) {
         Player player = event.getPlayer();
         if (player.isSwimming() || player.isClimbing()) {
-            disarmFlightInput(player);
             return;
-        }
-        if (!player.isGliding() && hasUsableElytra(player)) {
-            armFlightInput(player);
         }
         if (player.isOnGround()) {
             return;
@@ -77,33 +70,26 @@ final class ElytraSlotController implements Listener {
         }
     }
 
-    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
-    public void onToggleFlight(PlayerToggleFlightEvent event) {
+    @EventHandler
+    public void onInput(PlayerInputEvent event) {
         Player player = event.getPlayer();
-        if (!temporarilyFlightEnabled.remove(player.getUniqueId()) || !hasUsableElytra(player)) {
+        boolean wasJumping = jumpHeld.contains(player.getUniqueId());
+        if (event.getInput().isJump()) {
+            jumpHeld.add(player.getUniqueId());
+        } else {
+            jumpHeld.remove(player.getUniqueId());
+        }
+        if (wasJumping || !event.getInput().isJump() || player.isGliding()) {
             return;
         }
-        event.setCancelled(true);
-        player.setFlying(false);
-        player.setAllowFlight(false);
         if (canGlide(player)) {
             player.setGliding(true);
         }
     }
 
     @EventHandler
-    public void onJoin(PlayerJoinEvent event) {
-        syncFlightInput(event.getPlayer());
-    }
-
-    @EventHandler
-    public void onRespawn(PlayerRespawnEvent event) {
-        Bukkit.getScheduler().runTask(plugin, () -> syncFlightInput(event.getPlayer()));
-    }
-
-    @EventHandler
     public void onQuit(PlayerQuitEvent event) {
-        disarmFlightInput(event.getPlayer());
+        jumpHeld.remove(event.getPlayer().getUniqueId());
     }
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
@@ -264,37 +250,7 @@ final class ElytraSlotController implements Listener {
     }
 
     void shutdown() {
-        for (UUID playerId : Set.copyOf(temporarilyFlightEnabled)) {
-            Player player = Bukkit.getPlayer(playerId);
-            if (player != null) {
-                disarmFlightInput(player);
-            }
-        }
-    }
-
-    private void armFlightInput(Player player) {
-        GameMode gameMode = player.getGameMode();
-        if ((gameMode == GameMode.SURVIVAL || gameMode == GameMode.ADVENTURE)
-                && !player.getAllowFlight()) {
-            temporarilyFlightEnabled.add(player.getUniqueId());
-            player.setAllowFlight(true);
-        }
-    }
-
-    private void disarmFlightInput(Player player) {
-        if (temporarilyFlightEnabled.remove(player.getUniqueId())) {
-            player.setFlying(false);
-            player.setAllowFlight(false);
-        }
-    }
-
-    private void syncFlightInput(Player player) {
-        if (!player.isGliding() && !player.isSwimming() && !player.isClimbing()
-                && hasUsableElytra(player)) {
-            armFlightInput(player);
-        } else {
-            disarmFlightInput(player);
-        }
+        jumpHeld.clear();
     }
 
     private boolean hasUsableElytra(Player player) {
@@ -340,10 +296,8 @@ final class ElytraSlotController implements Listener {
     private void save(Player player, ItemStack item) {
         if (isEmpty(item)) {
             player.getPersistentDataContainer().remove(storedElytraKey);
-            disarmFlightInput(player);
         } else if (item.getType() == Material.ELYTRA) {
             player.getPersistentDataContainer().set(storedElytraKey, PersistentDataType.BYTE_ARRAY, item.serializeAsBytes());
-            syncFlightInput(player);
         }
     }
 

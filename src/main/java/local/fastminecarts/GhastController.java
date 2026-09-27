@@ -125,7 +125,8 @@ final class GhastController implements Listener {
                 iterator.remove();
                 continue;
             }
-            if (!hasPlayerRider(ghast)) {
+            Player rider = playerRider(ghast);
+            if (rider == null || !hasMovementInput(rider)) {
                 state.rampSpeedBlocksPerSecond = 0.0;
                 state.restoreVanillaSpeed();
                 continue;
@@ -170,12 +171,12 @@ final class GhastController implements Listener {
         return fallback;
     }
 
-    private static boolean hasPlayerRider(HappyGhast ghast) {
+    private static Player playerRider(HappyGhast ghast) {
         for (Player player : Bukkit.getOnlinePlayers()) {
             Entity vehicle = player.getVehicle();
             while (vehicle != null) {
                 if (vehicle.getUniqueId().equals(ghast.getUniqueId())) {
-                    return true;
+                    return player;
                 }
                 vehicle = vehicle.getVehicle();
             }
@@ -185,10 +186,19 @@ final class GhastController implements Listener {
             // fallback until the API exposes the attachment directly.
             if (player.getWorld().equals(ghast.getWorld())
                     && player.getLocation().distanceSquared(ghast.getLocation()) < 1.0) {
-                return true;
+                return player;
             }
         }
-        return false;
+        return null;
+    }
+
+    private static boolean hasMovementInput(Player player) {
+        return player.getCurrentInput().isForward()
+                || player.getCurrentInput().isBackward()
+                || player.getCurrentInput().isLeft()
+                || player.getCurrentInput().isRight()
+                || player.getCurrentInput().isJump()
+                || player.getCurrentInput().isSneak();
     }
 
     private static final class GhastState {
