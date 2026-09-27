@@ -2,7 +2,7 @@ FROM maven:3.9-eclipse-temurin-25 AS plugin-build
 
 WORKDIR /workspace
 
-ARG APP_VERSION=1.3.4
+ARG APP_VERSION=1.3.7
 
 COPY pom.xml .
 COPY src ./src
