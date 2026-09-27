@@ -29,3 +29,6 @@ ghast-speed-blocks-per-second: 200.0
 
 # A low value gives Ghasts time to build up to their maximum speed.
 ghast-acceleration-blocks-per-second-squared: 1.0
+
+# Holding a firework rocket in either hand multiplies Happy Ghast acceleration.
+ghast-firework-acceleration-multiplier: 4.0
