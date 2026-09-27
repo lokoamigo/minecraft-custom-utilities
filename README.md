@@ -100,7 +100,12 @@ make package
 make version
 ```
 
-Before releasing, update `pom.xml`, `Dockerfile.paper`, and
-`docker-compose.yml` to the same exact version and commit them together.
-Pushing a matching tag such as `v1.3.3` creates the GitHub release. The release
-workflow fails if the tag and POM versions differ.
+To release, open **Releases** on GitHub, choose **Draft a new release**, create a
+new tag such as `v1.3.5` from the default branch, and publish it. The release
+workflow derives the version from the tag, updates and commits all checked-in
+version values, verifies the packaged metadata, moves the new tag to that
+release commit, and attaches `MinecraftCustomUtilities.jar` to the release.
+
+Release tags must use the exact form `vMAJOR.MINOR.PATCH`, must identify a new
+version, and must not be reused. The workflow needs permission to push to the
+default branch; its release commit must be allowed by branch protection rules.

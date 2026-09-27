@@ -1,0 +1,89 @@
+name: Prepare Minecraft Custom Utilities Release
+
+on:
+  release:
+    types:
+      - published
+
+permissions:
+  contents: write
+
+concurrency:
+  group: minecraft-custom-utilities-release
+  cancel-in-progress: false
+
+jobs:
+  prepare-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Validate release tag
+        id: version
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        shell: bash
+        run: |
+          if [[ ! "$RELEASE_TAG" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+            echo "Release tag must use the form v1.2.3; got '$RELEASE_TAG'." >&2
+            exit 1
+          fi
+
+          echo "value=${BASH_REMATCH[1]}" >> "$GITHUB_OUTPUT"
+
+      - name: Check out the default branch
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+
+      - name: Configure release commit author
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Set release version
+        env:
+          RELEASE_VERSION: ${{ steps.version.outputs.value }}
+        shell: bash
+        run: ./scripts/set-version.sh "$RELEASE_VERSION"
+
+      - name: Set up Java 25
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+
+      - name: Verify release
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        shell: bash
+        run: ./scripts/verify-release.sh "$RELEASE_TAG"
+
+      - name: Commit version and move release tag
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_VERSION: ${{ steps.version.outputs.value }}
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo "Version $RELEASE_VERSION is already checked in; refusing to reuse it." >&2
+            exit 1
+          fi
+
+          git add pom.xml .env.example Dockerfile.paper docker-compose.yml
+          git commit -m "Release $RELEASE_VERSION"
+          git tag --force "$RELEASE_TAG"
+          git push origin "HEAD:$DEFAULT_BRANCH"
+          git push origin "refs/tags/$RELEASE_TAG" --force
+
+      - name: Upload release artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        shell: bash
+        run: |
+          gh release upload "$RELEASE_TAG" \
+            target/MinecraftCustomUtilities.jar --clobber

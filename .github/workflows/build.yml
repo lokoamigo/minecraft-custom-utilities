@@ -5,8 +5,6 @@ on:
     branches:
       - master
       - main
-    tags:
-      - 'v*'
   pull_request:
 
 permissions:
@@ -34,13 +32,9 @@ jobs:
       - name: Build with Maven
         shell: bash
         run: |
-          VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
+          ./scripts/verify-release.sh
 
-          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
-            ./scripts/verify-release.sh "$GITHUB_REF_NAME"
-          else
-            ./scripts/verify-release.sh
-          fi
+          VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
 
           echo "APP_VERSION=$VERSION" >> "$GITHUB_ENV"
 
@@ -64,17 +58,6 @@ jobs:
         with:
           name: Minecraft-Custom-Utilities-${{ env.APP_VERSION }}
           path: dist/MinecraftCustomUtilities.jar
-
-      - name: Create version release
-        if: startsWith(github.ref, 'refs/tags/v')
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          gh release create "$GITHUB_REF_NAME" \
-            dist/MinecraftCustomUtilities.jar \
-            --title "Minecraft Custom Utilities $APP_VERSION" \
-            --generate-notes
 
       - name: Update latest release
         if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
