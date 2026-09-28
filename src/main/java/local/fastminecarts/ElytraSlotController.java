@@ -40,7 +40,7 @@ import java.util.UUID;
 
 final class ElytraSlotController implements Listener {
     private static final int SLOT = 4;
-    private static final int STATUS_SEGMENTS = 10;
+    private static final int STATUS_SEGMENTS = 4;
     private static final Component TITLE = Component.text("Elytra Slot");
     private static final NamespacedKey LEGACY_STORED_ELYTRA_KEY =
             Objects.requireNonNull(NamespacedKey.fromString("fastminecarts:elytra_slot"));
