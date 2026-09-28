@@ -18,8 +18,8 @@
 
 
 # speed defaults
-speed-blocks-per-second: 8.0
-acceleration-blocks-per-second-squared: 0.0
+speed-blocks-per-second: 600.0
+acceleration-blocks-per-second-squared: 200.0
 curve-speed-blocks-per-second: 12.0
 slow-when-empty: true
 boost-on-all-rails: false
