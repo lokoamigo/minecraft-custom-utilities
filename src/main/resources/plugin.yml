@@ -8,6 +8,10 @@ commands:
   elytraslot:
     description: Opens your additional Elytra equipment slot.
     usage: /elytraslot
+  killphantoms:
+    description: Kills phantoms near the player.
+    usage: /killphantoms [radius]
+    permission: fastminecarts.admin
 
 permissions:
   fastminecarts.admin:

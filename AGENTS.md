@@ -41,16 +41,26 @@ These instructions apply to the entire repository.
   `docker-compose.yml` identical to the POM version.
 - The release tag must be `v` followed by that exact version. For example, POM
   version `1.4.0` requires tag `v1.4.0`.
-- Before committing or tagging a release, run `make verify-release`. It builds with
-  the checked-in POM and without a `-Drevision` override.
+- Prepare releases only through the manually triggered **Prepare Minecraft Custom
+  Utilities Release** GitHub Actions workflow. Leave its version input empty to
+  increment the current patch version automatically, or supply an explicit newer
+  version without a `v` prefix for a minor or major release. Do not manually create
+  the release commit, tag, or draft release.
+- The release workflow must reject malformed, non-incrementing, or previously used
+  versions and tags. It updates all checked-in version fields, runs the equivalent
+  of `make verify-release`, atomically pushes the release commit and matching tag,
+  attaches the JAR to a draft GitHub release, and updates the rolling `latest`
+  release.
+- Before publishing the draft, confirm that the workflow succeeded and that the
+  draft contains `MinecraftCustomUtilities.jar`.
 - The resulting `target/MinecraftCustomUtilities.jar` must contain a `plugin.yml`
   version and `META-INF/MANIFEST.MF` implementation version identical to the POM
   version. Its manifest title must be `Minecraft Custom Utilities`.
-- Do not push a release tag if the verification command fails or any version,
-  artifact name, plugin name, or manifest title differs.
-- Push the release commit to the default branch and push the matching version tag.
-  The GitHub Actions workflow publishes both the rolling `latest` build and the
-  versioned GitHub release.
+- The workflow must not push a release commit or tag if verification fails or any
+  version, artifact name, plugin name, or manifest title differs.
+- The workflow requires permission to push its release commit and tag to the
+  default branch. Treat branch protection that blocks `github-actions[bot]` as a
+  release blocker; do not bypass verification or create the release manually.
 
 ## Change verification
 

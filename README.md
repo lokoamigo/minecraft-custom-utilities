@@ -51,6 +51,11 @@ an edit is open. Changes are saved when the player clicks Done or signs the book
 cancelling leaves the lectern unchanged. The `minecraftcustomutilities.lecternedit`
 permission is granted to everyone by default.
 
+## Phantom Cleanup
+
+Operators can run `/killphantoms [radius]` to kill all phantoms near themselves.
+The radius defaults to 64 blocks and can be set to any value up to 256 blocks.
+
 ## Docker Paper Server
 
 Build and start a local Paper server with this plugin and WorldEdit:
@@ -110,12 +115,17 @@ make package
 make version
 ```
 
-To release, open **Releases** on GitHub, choose **Draft a new release**, create a
-new tag such as `v1.3.5` from the default branch, and publish it. The release
-workflow derives the version from the tag, updates and commits all checked-in
-version values, verifies the packaged metadata, moves the new tag to that
-release commit, and attaches `MinecraftCustomUtilities.jar` to the release.
+To prepare a release, run the **Prepare Minecraft Custom Utilities Release**
+workflow from the Actions tab. Leave the version input blank to increment the
+current patch version automatically, or enter an explicit newer
+`MAJOR.MINOR.PATCH` version without a `v` prefix for a minor or major release. The
+workflow updates and commits all checked-in version values, verifies the packaged
+metadata, atomically pushes the release commit and matching `vMAJOR.MINOR.PATCH`
+tag, attaches `MinecraftCustomUtilities.jar` to a draft GitHub release, and
+updates the rolling `latest` release. Review the completed workflow and attached
+JAR, then publish the draft release.
 
-Release tags must use the exact form `vMAJOR.MINOR.PATCH`, must identify a new
-version, and must not be reused. The workflow needs permission to push to the
-default branch; its release commit must be allowed by branch protection rules.
+Release versions must be newer than the checked-in version and tags must not be
+reused. Do not manually create the release commit, tag, or draft. The workflow
+needs permission to push to the default branch; its release commit must be allowed
+by branch protection rules.
