@@ -18,7 +18,6 @@ import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
-import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerExpChangeEvent;
 import org.bukkit.event.player.PlayerInputEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
@@ -62,23 +61,6 @@ final class ElytraSlotController implements Listener {
         ElytraInventory holder = new ElytraInventory(player.getUniqueId());
         holder.inventory.setItem(SLOT, load(player));
         player.openInventory(holder.inventory);
-    }
-
-    @EventHandler(ignoreCancelled = true)
-    public void onMove(PlayerMoveEvent event) {
-        Player player = event.getPlayer();
-        if (player.isSwimming() || player.isClimbing()) {
-            return;
-        }
-        if (player.isOnGround()) {
-            return;
-        }
-        if (!player.isGliding()
-                && player.isSneaking()
-                && player.getVelocity().getY() < 0.0
-                && canGlide(player)) {
-            player.setGliding(true);
-        }
     }
 
     @EventHandler
