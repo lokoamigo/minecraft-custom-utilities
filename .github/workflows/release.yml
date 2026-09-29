@@ -4,8 +4,8 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: Release version (for example, 1.4.4)
-        required: true
+        description: Optional version; leave blank for the next patch release
+        required: false
         type: string
 
 permissions:
@@ -33,13 +33,24 @@ jobs:
           RELEASE_VERSION: ${{ inputs.version }}
         shell: bash
         run: |
+          CURRENT_VERSION=$(sed -n 's/.*<revision>\([^<]*\)<\/revision>.*/\1/p' pom.xml)
+          if [[ ! "$CURRENT_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Current POM version is not a release version: '$CURRENT_VERSION'." >&2
+            exit 1
+          fi
+
+          if [[ -z "$RELEASE_VERSION" ]]; then
+            IFS=. read -r MAJOR MINOR PATCH <<< "$CURRENT_VERSION"
+            RELEASE_VERSION="$MAJOR.$MINOR.$((10#$PATCH + 1))"
+            echo "No version supplied; preparing next patch release $RELEASE_VERSION."
+          fi
+
           if [[ ! "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "Release version must use the form 1.2.3; got '$RELEASE_VERSION'." >&2
             exit 1
           fi
 
           RELEASE_TAG="v$RELEASE_VERSION"
-          CURRENT_VERSION=$(sed -n 's/.*<revision>\([^<]*\)<\/revision>.*/\1/p' pom.xml)
 
           if [[ "$RELEASE_VERSION" == "$CURRENT_VERSION" ]] || \
              [[ "$(printf '%s\n%s\n' "$CURRENT_VERSION" "$RELEASE_VERSION" | sort -V | tail -n 1)" != "$RELEASE_VERSION" ]]; then
@@ -59,6 +70,7 @@ jobs:
 
           echo "version=$RELEASE_VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+          echo "Preparing Minecraft Custom Utilities $RELEASE_VERSION ($RELEASE_TAG)." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Set release version
         env:

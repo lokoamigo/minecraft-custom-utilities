@@ -102,12 +102,14 @@ make version
 ```
 
 To prepare a release, run the **Prepare Minecraft Custom Utilities Release**
-workflow from the Actions tab and enter a new `MAJOR.MINOR.PATCH` version without
-a `v` prefix. The workflow updates and commits all checked-in version values,
-verifies the packaged metadata, atomically pushes the release commit and matching
-`vMAJOR.MINOR.PATCH` tag, attaches `MinecraftCustomUtilities.jar` to a draft
-GitHub release, and updates the rolling `latest` release. Review the completed
-workflow and attached JAR, then publish the draft release.
+workflow from the Actions tab. Leave the version input blank to increment the
+current patch version automatically, or enter an explicit newer
+`MAJOR.MINOR.PATCH` version without a `v` prefix for a minor or major release. The
+workflow updates and commits all checked-in version values, verifies the packaged
+metadata, atomically pushes the release commit and matching `vMAJOR.MINOR.PATCH`
+tag, attaches `MinecraftCustomUtilities.jar` to a draft GitHub release, and
+updates the rolling `latest` release. Review the completed workflow and attached
+JAR, then publish the draft release.
 
 Release versions must be newer than the checked-in version and tags must not be
 reused. Do not manually create the release commit, tag, or draft. The workflow

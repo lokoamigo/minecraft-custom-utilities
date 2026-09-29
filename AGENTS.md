@@ -42,9 +42,10 @@ These instructions apply to the entire repository.
 - The release tag must be `v` followed by that exact version. For example, POM
   version `1.4.0` requires tag `v1.4.0`.
 - Prepare releases only through the manually triggered **Prepare Minecraft Custom
-  Utilities Release** GitHub Actions workflow. Supply the desired version without
-  a `v` prefix (for example, `1.4.4`). Do not manually create the release commit,
-  tag, or draft release.
+  Utilities Release** GitHub Actions workflow. Leave its version input empty to
+  increment the current patch version automatically, or supply an explicit newer
+  version without a `v` prefix for a minor or major release. Do not manually create
+  the release commit, tag, or draft release.
 - The release workflow must reject malformed, non-incrementing, or previously used
   versions and tags. It updates all checked-in version fields, runs the equivalent
   of `make verify-release`, atomically pushes the release commit and matching tag,
