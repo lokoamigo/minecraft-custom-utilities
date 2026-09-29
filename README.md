@@ -42,6 +42,11 @@ slot uses a small command-opened inventory instead of changing the client invent
 screen. While gliding with either a chest-slot or additional Elytra, a color-coded
 durability meter appears in the action bar above the hotbar.
 
+## Phantom Cleanup
+
+Operators can run `/killphantoms [radius]` to kill all phantoms near themselves.
+The radius defaults to 64 blocks and can be set to any value up to 256 blocks.
+
 ## Docker Paper Server
 
 Build and start a local Paper server with this plugin and WorldEdit:

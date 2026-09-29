@@ -28,6 +28,8 @@ public final class MinecraftCustomUtilitiesPlugin extends JavaPlugin {
                 new GhastSpeedCommand(ghastController));
         registerCommand("elytraslot", "Open your additional Elytra slot",
                 new ElytraSlotCommand(elytraSlot));
+        registerCommand("killphantoms", "Kill nearby phantoms",
+                new KillPhantomsCommand());
 
         int changed = controller.applyToAllLoadedMinecarts();
         getLogger().info(String.format(Locale.ROOT,
