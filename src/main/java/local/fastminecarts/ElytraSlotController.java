@@ -1,5 +1,6 @@
 package local.fastminecarts;
 
+import net.kyori.adventure.bossbar.BossBar;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
@@ -32,7 +33,9 @@ import org.bukkit.inventory.meta.Damageable;
 import org.bukkit.persistence.PersistentDataType;
 
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
@@ -48,7 +51,7 @@ final class ElytraSlotController implements Listener {
     private final NamespacedKey storedElytraKey;
     private final Set<UUID> forcedGlideStops = new HashSet<>();
     private final Set<UUID> jumpHeld = new HashSet<>();
-    private final Set<UUID> statusVisible = new HashSet<>();
+    private final Map<UUID, BossBar> statusBars = new HashMap<>();
 
     ElytraSlotController(MinecraftCustomUtilitiesPlugin plugin) {
         this.plugin = plugin;
@@ -85,7 +88,7 @@ final class ElytraSlotController implements Listener {
         UUID playerId = event.getPlayer().getUniqueId();
         forcedGlideStops.remove(playerId);
         jumpHeld.remove(playerId);
-        statusVisible.remove(playerId);
+        statusBars.remove(playerId);
     }
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
@@ -247,7 +250,6 @@ final class ElytraSlotController implements Listener {
             }
             if (hasVanillaElytraEquipped(player)) {
                 showStatus(player, player.getInventory().getItem(EquipmentSlot.CHEST));
-                statusVisible.add(player.getUniqueId());
                 continue;
             }
             if (!canGlide(player)) {
@@ -263,7 +265,6 @@ final class ElytraSlotController implements Listener {
             }
             save(player, damaged);
             showStatus(player, damaged);
-            statusVisible.add(player.getUniqueId());
             if (!hasUsableElytra(player)) {
                 player.setGliding(false);
                 hideStatus(player);
@@ -304,7 +305,10 @@ final class ElytraSlotController implements Listener {
     void shutdown() {
         forcedGlideStops.clear();
         jumpHeld.clear();
-        statusVisible.clear();
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            hideStatus(player);
+        }
+        statusBars.clear();
     }
 
     private void stopGlidingForVehicle(Player player) {
@@ -323,12 +327,13 @@ final class ElytraSlotController implements Listener {
     }
 
     private void hideStatus(Player player) {
-        if (statusVisible.remove(player.getUniqueId())) {
-            player.sendActionBar(Component.empty());
+        BossBar statusBar = statusBars.remove(player.getUniqueId());
+        if (statusBar != null) {
+            player.hideBossBar(statusBar);
         }
     }
 
-    private static void showStatus(Player player, ItemStack item) {
+    private void showStatus(Player player, ItemStack item) {
         Damageable damageable = (Damageable) item.getItemMeta();
         int maximum = damageable.hasMaxDamage() ? damageable.getMaxDamage() : item.getType().getMaxDurability();
         int remaining = Math.max(0, maximum - damageable.getDamage());
@@ -344,7 +349,19 @@ final class ElytraSlotController implements Listener {
                 .append(Component.text("░".repeat(STATUS_SEGMENTS - filledSegments), NamedTextColor.DARK_GRAY))
                 .append(Component.text("  " + percentage + "% (" + remaining + "/" + maximum + ")",
                         statusColor));
-        player.sendActionBar(status);
+        float progress = maximum == 0 ? 0.0f : (float) remaining / maximum;
+        BossBar.Color barColor = percentage > 50 ? BossBar.Color.GREEN
+                : percentage >= 25 ? BossBar.Color.YELLOW : BossBar.Color.RED;
+        BossBar statusBar = statusBars.get(player.getUniqueId());
+        if (statusBar == null) {
+            statusBar = BossBar.bossBar(status, progress, barColor, BossBar.Overlay.PROGRESS);
+            statusBars.put(player.getUniqueId(), statusBar);
+            player.showBossBar(statusBar);
+            return;
+        }
+        statusBar.name(status);
+        statusBar.progress(progress);
+        statusBar.color(barColor);
     }
 
     private boolean hasUsableElytra(Player player) {
