@@ -42,7 +42,6 @@ import java.util.UUID;
 
 final class ElytraSlotController implements Listener {
     private static final int SLOT = 4;
-    private static final int STATUS_SEGMENTS = 4;
     private static final Component TITLE = Component.text("Elytra Slot");
     private static final NamespacedKey LEGACY_STORED_ELYTRA_KEY =
             Objects.requireNonNull(NamespacedKey.fromString("fastminecarts:elytra_slot"));
@@ -338,17 +337,11 @@ final class ElytraSlotController implements Listener {
         int maximum = damageable.hasMaxDamage() ? damageable.getMaxDamage() : item.getType().getMaxDurability();
         int remaining = Math.max(0, maximum - damageable.getDamage());
         int percentage = maximum == 0 ? 0 : (int) ((long) remaining * 100 / maximum);
-        int filledSegments = maximum == 0 ? 0
-                : Math.min(STATUS_SEGMENTS,
-                        (int) (((long) remaining * STATUS_SEGMENTS + maximum - 1) / maximum));
         NamedTextColor statusColor = percentage > 50 ? NamedTextColor.GREEN
                 : percentage >= 25 ? NamedTextColor.YELLOW : NamedTextColor.RED;
 
-        Component status = Component.text("Elytra  ", NamedTextColor.GRAY)
-                .append(Component.text("█".repeat(filledSegments), statusColor))
-                .append(Component.text("░".repeat(STATUS_SEGMENTS - filledSegments), NamedTextColor.DARK_GRAY))
-                .append(Component.text("  " + percentage + "% (" + remaining + "/" + maximum + ")",
-                        statusColor));
+        Component status = Component.text(
+                "Elytra " + percentage + "% (" + remaining + "/" + maximum + ")", statusColor);
         float progress = maximum == 0 ? 0.0f : (float) remaining / maximum;
         BossBar.Color barColor = percentage > 50 ? BossBar.Color.GREEN
                 : percentage >= 25 ? BossBar.Color.YELLOW : BossBar.Color.RED;
