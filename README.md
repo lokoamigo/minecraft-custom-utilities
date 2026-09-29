@@ -101,12 +101,15 @@ make package
 make version
 ```
 
-To release, open **Releases** on GitHub, choose **Draft a new release**, create a
-new tag such as `v1.3.5` from the default branch, and publish it. The release
-workflow derives the version from the tag, updates and commits all checked-in
-version values, verifies the packaged metadata, moves the new tag to that
-release commit, and attaches `MinecraftCustomUtilities.jar` to the release.
+To prepare a release, run the **Prepare Minecraft Custom Utilities Release**
+workflow from the Actions tab and enter a new `MAJOR.MINOR.PATCH` version without
+a `v` prefix. The workflow updates and commits all checked-in version values,
+verifies the packaged metadata, atomically pushes the release commit and matching
+`vMAJOR.MINOR.PATCH` tag, attaches `MinecraftCustomUtilities.jar` to a draft
+GitHub release, and updates the rolling `latest` release. Review the completed
+workflow and attached JAR, then publish the draft release.
 
-Release tags must use the exact form `vMAJOR.MINOR.PATCH`, must identify a new
-version, and must not be reused. The workflow needs permission to push to the
-default branch; its release commit must be allowed by branch protection rules.
+Release versions must be newer than the checked-in version and tags must not be
+reused. Do not manually create the release commit, tag, or draft. The workflow
+needs permission to push to the default branch; its release commit must be allowed
+by branch protection rules.

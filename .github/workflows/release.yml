@@ -1,9 +1,12 @@
 name: Prepare Minecraft Custom Utilities Release
 
 on:
-  release:
-    types:
-      - published
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release version (for example, 1.4.4)
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -17,34 +20,49 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Validate release tag
-        id: version
-        env:
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
-        shell: bash
-        run: |
-          if [[ ! "$RELEASE_TAG" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
-            echo "Release tag must use the form v1.2.3; got '$RELEASE_TAG'." >&2
-            exit 1
-          fi
-
-          echo "value=${BASH_REMATCH[1]}" >> "$GITHUB_OUTPUT"
-
       - name: Check out the default branch
         uses: actions/checkout@v7
         with:
           ref: ${{ github.event.repository.default_branch }}
           fetch-depth: 0
 
-      - name: Configure release commit author
+      - name: Validate release version
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ inputs.version }}
         shell: bash
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if [[ ! "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Release version must use the form 1.2.3; got '$RELEASE_VERSION'." >&2
+            exit 1
+          fi
+
+          RELEASE_TAG="v$RELEASE_VERSION"
+          CURRENT_VERSION=$(sed -n 's/.*<revision>\([^<]*\)<\/revision>.*/\1/p' pom.xml)
+
+          if [[ "$RELEASE_VERSION" == "$CURRENT_VERSION" ]] || \
+             [[ "$(printf '%s\n%s\n' "$CURRENT_VERSION" "$RELEASE_VERSION" | sort -V | tail -n 1)" != "$RELEASE_VERSION" ]]; then
+            echo "Release version $RELEASE_VERSION must be newer than $CURRENT_VERSION." >&2
+            exit 1
+          fi
+
+          if git show-ref --verify --quiet "refs/tags/$RELEASE_TAG"; then
+            echo "Release tag $RELEASE_TAG already exists; release tags must not be reused." >&2
+            exit 1
+          fi
+
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "GitHub release $RELEASE_TAG already exists; releases must not be reused." >&2
+            exit 1
+          fi
+
+          echo "version=$RELEASE_VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
 
       - name: Set release version
         env:
-          RELEASE_VERSION: ${{ steps.version.outputs.value }}
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
         shell: bash
         run: ./scripts/set-version.sh "$RELEASE_VERSION"
 
@@ -57,33 +75,64 @@ jobs:
 
       - name: Verify release
         env:
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
         shell: bash
         run: ./scripts/verify-release.sh "$RELEASE_TAG"
 
-      - name: Commit version and move release tag
+      - name: Create and push release commit and tag
         env:
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
-          RELEASE_VERSION: ${{ steps.version.outputs.value }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
         shell: bash
         run: |
           if git diff --quiet; then
-            echo "Version $RELEASE_VERSION is already checked in; refusing to reuse it." >&2
+            echo "Setting version $RELEASE_VERSION did not change the repository." >&2
             exit 1
           fi
 
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add pom.xml .env.example Dockerfile.paper docker-compose.yml
           git commit -m "Release $RELEASE_VERSION"
-          git tag --force "$RELEASE_TAG"
-          git push origin "HEAD:$DEFAULT_BRANCH"
-          git push origin "refs/tags/$RELEASE_TAG" --force
+          git tag "$RELEASE_TAG"
+          git push --atomic origin \
+            "HEAD:refs/heads/$DEFAULT_BRANCH" \
+            "refs/tags/$RELEASE_TAG"
 
-      - name: Upload release artifact
+      - name: Create draft GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
         shell: bash
         run: |
-          gh release upload "$RELEASE_TAG" \
-            target/MinecraftCustomUtilities.jar --clobber
+          gh release create "$RELEASE_TAG" \
+            target/MinecraftCustomUtilities.jar \
+            --verify-tag \
+            --draft \
+            --generate-notes \
+            --title "Minecraft Custom Utilities $RELEASE_VERSION"
+
+      - name: Update latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          RELEASE_SHA=$(git rev-parse HEAD)
+          git tag --force latest "$RELEASE_SHA"
+          git push origin refs/tags/latest --force
+
+          if gh release view latest >/dev/null 2>&1; then
+            gh release upload latest target/MinecraftCustomUtilities.jar --clobber
+            gh release edit latest \
+              --title "Latest Minecraft Custom Utilities Build" \
+              --notes "Automatically built from commit $RELEASE_SHA" \
+              --latest
+          else
+            gh release create latest \
+              target/MinecraftCustomUtilities.jar \
+              --title "Latest Minecraft Custom Utilities Build" \
+              --notes "Automatically built from commit $RELEASE_SHA" \
+              --latest
+          fi
