@@ -92,6 +92,25 @@ minecartspeed curvespeed <value>
 minecartspeed reload
 ```
 
+Players can search the shulker boxes in their local inventory for one or more
+items. Each request is an item and quantity pair:
+
+```text
+/shulkerfind diamond 64 firework_rocket 32
+```
+
+The quantity can be omitted for non-stackable items and defaults to one. For
+example, `/shulkerfind diamond_sword bow` requests one of each. An explicit
+quantity is still accepted when requesting multiple non-stackable items.
+
+The command lists matching shulker boxes by inventory slot and reports whether
+the combined contents satisfy each requested quantity. If every requested item
+is available and the player's inventory has enough room, the player can repeat
+the same command within 30 seconds (normally Up Arrow followed by Enter) to move
+the requested quantities out of the shulker boxes. The transfer is revalidated
+before anything is changed. `/shulkerfind confirm` remains available as an
+alternative.
+
 ## Versioning
 
 The canonical version is defined by the `revision` property in `pom.xml`.
