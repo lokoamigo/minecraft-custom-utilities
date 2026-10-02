@@ -12,6 +12,9 @@ commands:
     description: Kills phantoms near the player.
     usage: /killphantoms [radius]
     permission: fastminecarts.admin
+  shulkerfind:
+    description: Finds requested items in shulker boxes in your inventory.
+    usage: /shulkerfind <item> [quantity] [<item> [quantity] ...] | confirm
 
 permissions:
   fastminecarts.admin:

@@ -30,6 +30,8 @@ public final class MinecraftCustomUtilitiesPlugin extends JavaPlugin {
                 new ElytraSlotCommand(elytraSlot));
         registerCommand("killphantoms", "Kill nearby phantoms",
                 new KillPhantomsCommand());
+        registerCommand("shulkerfind", "Find items in shulker boxes in your inventory",
+                new ShulkerFindCommand());
 
         int changed = controller.applyToAllLoadedMinecarts();
         getLogger().info(String.format(Locale.ROOT,
