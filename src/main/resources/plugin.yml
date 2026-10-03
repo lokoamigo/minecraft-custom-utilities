@@ -17,7 +17,7 @@ commands:
     permission: fastminecarts.admin
   shulkerfind:
     description: Finds requested items in shulker boxes in your inventory.
-    usage: /shulkerfind <item> [quantity] [<item> [quantity] ...] | confirm
+    usage: /shulkerfind [locate] <item> [quantity] [<item> [quantity] ...] | confirm
 
 permissions:
   fastminecarts.admin:

@@ -23,7 +23,7 @@ import java.util.stream.Collectors;
 
 final class ShulkerFindCommand implements BasicCommand {
     private static final String USAGE =
-            "Usage: /shulkerfind <item> [quantity] [<item> [quantity] ...]";
+            "Usage: /shulkerfind [locate] <item> [quantity] [<item> [quantity] ...]";
     private static final long CONFIRMATION_TTL_MILLIS = Duration.ofSeconds(30).toMillis();
 
     private final Map<UUID, PendingTransfer> pendingTransfers = new HashMap<>();
@@ -43,8 +43,20 @@ final class ShulkerFindCommand implements BasicCommand {
             return;
         }
 
-        Map<Material, Integer> requested = parseRequests(player, args);
+        boolean locateOnly = args[0].equalsIgnoreCase("locate");
+        String[] requestArgs = locateOnly ? Arrays.copyOfRange(args, 1, args.length) : args;
+        if (requestArgs.length == 0) {
+            player.sendMessage(USAGE);
+            return;
+        }
+
+        Map<Material, Integer> requested = parseRequests(player, requestArgs);
         if (requested == null) {
+            return;
+        }
+
+        if (locateOnly) {
+            search(player, requested);
             return;
         }
 
@@ -83,9 +95,12 @@ final class ShulkerFindCommand implements BasicCommand {
     @Override
     public Collection<String> suggest(CommandSourceStack source, String[] args) {
         if (args.length == 0) {
-            return List.of("confirm");
+            return List.of("locate", "confirm");
         }
-        SuggestionType type = suggestionType(Arrays.copyOf(args, args.length - 1));
+        boolean locateOnly = args[0].equalsIgnoreCase("locate");
+        int requestStart = locateOnly ? 1 : 0;
+        SuggestionType type = suggestionType(
+                Arrays.copyOfRange(args, requestStart, args.length - 1));
         if (type == SuggestionType.ITEM) {
             String prefix = args[args.length - 1].toLowerCase(Locale.ROOT);
             List<String> suggestions = new ArrayList<>(Arrays.stream(Material.values())
@@ -93,8 +108,13 @@ final class ShulkerFindCommand implements BasicCommand {
                     .map(material -> material.getKey().toString())
                     .filter(name -> matchesItemName(name, prefix))
                     .toList());
-            if (args.length == 1 && "confirm".startsWith(prefix)) {
-                suggestions.addFirst("confirm");
+            if (args.length == 1) {
+                if ("confirm".startsWith(prefix)) {
+                    suggestions.addFirst("confirm");
+                }
+                if ("locate".startsWith(prefix)) {
+                    suggestions.addFirst("locate");
+                }
             }
             return suggestions;
         }

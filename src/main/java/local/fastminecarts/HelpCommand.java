@@ -13,6 +13,7 @@ final class HelpCommand implements BasicCommand {
             "/mcu help - Show this command list.",
             "/elytraslot - Open your additional Elytra equipment slot.",
             "/shulkerfind <item> [quantity] [<item> [quantity] ...] - Find and move items from shulker boxes.",
+            "/shulkerfind locate <item> [quantity] [<item> [quantity] ...] - Find items without moving them.",
             "/shulkerfind confirm - Confirm a pending shulker item transfer.",
             "/killphantoms [radius] - Kill nearby phantoms. (admin)",
             "/minecartspeed - Show the current minecart settings. (admin)",
