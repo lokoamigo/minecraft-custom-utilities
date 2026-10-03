@@ -35,10 +35,6 @@ final class ShulkerFindCommand implements BasicCommand {
             source.getSender().sendMessage("This command can only be used by a player.");
             return;
         }
-        if (args.length == 1 && args[0].equalsIgnoreCase("confirm")) {
-            confirmTransfer(player);
-            return;
-        }
         if (args.length == 0) {
             player.sendMessage(USAGE);
             return;
@@ -96,7 +92,7 @@ final class ShulkerFindCommand implements BasicCommand {
     @Override
     public Collection<String> suggest(CommandSourceStack source, String[] args) {
         if (args.length == 0) {
-            return List.of("locate", "confirm");
+            return List.of("locate");
         }
         boolean locateOnly = args[0].equalsIgnoreCase("locate");
         int requestStart = locateOnly ? 1 : 0;
@@ -108,9 +104,6 @@ final class ShulkerFindCommand implements BasicCommand {
                     .filter(name -> matchesItemName(name, prefix))
                     .toList());
             if (args.length == 1) {
-                if ("confirm".startsWith(prefix)) {
-                    suggestions.addFirst("confirm");
-                }
                 if ("locate".startsWith(prefix)) {
                     suggestions.addFirst("locate");
                 }
@@ -218,16 +211,6 @@ final class ShulkerFindCommand implements BasicCommand {
         return path.contains(input);
     }
 
-    private void confirmTransfer(Player player) {
-        PendingTransfer pending = pendingTransfers.remove(player.getUniqueId());
-        if (pending == null || pending.expiresAtMillis() < System.currentTimeMillis()) {
-            player.sendMessage("There is no pending transfer. Run /shulkerfind again.");
-            return;
-        }
-
-        completeTransfer(player, pending);
-    }
-
     private static void completeTransfer(Player player, PendingTransfer pending) {
         TransferPlan plan = createTransferPlan(player, pending.requested());
         if (plan.status() == PlanStatus.MISSING_ITEMS) {
@@ -239,6 +222,10 @@ final class ShulkerFindCommand implements BasicCommand {
             return;
         }
 
+        if (!contentsMatch(player.getInventory().getStorageContents(), plan.originalContents())) {
+            player.sendMessage("Your inventory changed during the transfer check. Nothing was moved; run the command again.");
+            return;
+        }
         player.getInventory().setStorageContents(plan.finalContents());
         player.sendMessage("Moved " + formatAmounts(plan.moved())
                 + " from your shulker boxes into your inventory.");
@@ -291,7 +278,8 @@ final class ShulkerFindCommand implements BasicCommand {
 
     private static TransferPlan createTransferPlan(
             Player player, Map<Material, Integer> requested) {
-        ItemStack[] finalContents = cloneContents(player.getInventory().getStorageContents());
+        ItemStack[] originalContents = cloneContents(player.getInventory().getStorageContents());
+        ItemStack[] finalContents = cloneContents(originalContents);
         Map<Material, Integer> remaining = new LinkedHashMap<>(requested);
         Map<Material, Integer> movedAmounts = new LinkedHashMap<>();
         List<ItemStack> extracted = new ArrayList<>();
@@ -336,15 +324,35 @@ final class ShulkerFindCommand implements BasicCommand {
         }
 
         if (extracted.isEmpty()) {
-            return new TransferPlan(PlanStatus.MISSING_ITEMS, null, Map.of());
+            return new TransferPlan(PlanStatus.MISSING_ITEMS, null, null, Map.of());
         }
         for (ItemStack item : extracted) {
             if (!addToStorage(finalContents, item)) {
-                return new TransferPlan(PlanStatus.NO_SPACE, null, Map.of());
+                return new TransferPlan(PlanStatus.NO_SPACE, null, null, Map.of());
             }
         }
-        return new TransferPlan(PlanStatus.READY, finalContents,
+        return new TransferPlan(PlanStatus.READY, originalContents, finalContents,
                 Collections.unmodifiableMap(movedAmounts));
+    }
+
+    private static boolean contentsMatch(ItemStack[] current, ItemStack[] expected) {
+        if (current.length != expected.length) {
+            return false;
+        }
+        for (int slot = 0; slot < current.length; slot++) {
+            ItemStack currentItem = current[slot];
+            ItemStack expectedItem = expected[slot];
+            if (currentItem == null || currentItem.isEmpty()) {
+                if (expectedItem != null && !expectedItem.isEmpty()) {
+                    return false;
+                }
+            } else if (expectedItem == null || expectedItem.isEmpty()
+                    || currentItem.getAmount() != expectedItem.getAmount()
+                    || !currentItem.isSimilar(expectedItem)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static boolean addToStorage(ItemStack[] storage, ItemStack item) {
@@ -497,8 +505,8 @@ final class ShulkerFindCommand implements BasicCommand {
         }
     }
 
-    private record TransferPlan(
-            PlanStatus status, ItemStack[] finalContents, Map<Material, Integer> moved) {
+    private record TransferPlan(PlanStatus status, ItemStack[] originalContents,
+                                ItemStack[] finalContents, Map<Material, Integer> moved) {
     }
 
     private enum PlanStatus {

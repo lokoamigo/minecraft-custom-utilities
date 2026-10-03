@@ -8,6 +8,7 @@ import java.util.Locale;
 public final class MinecraftCustomUtilitiesPlugin extends JavaPlugin {
     private GhastController ghastController;
     private ElytraSlotController elytraSlot;
+    private QuickOpenController quickOpen;
 
     @Override
     public void onEnable() {
@@ -22,12 +23,16 @@ public final class MinecraftCustomUtilitiesPlugin extends JavaPlugin {
         Bukkit.getPluginManager().registerEvents(ghastController, this);
         elytraSlot = new ElytraSlotController(this);
         Bukkit.getPluginManager().registerEvents(elytraSlot, this);
+        quickOpen = new QuickOpenController(this);
+        Bukkit.getPluginManager().registerEvents(quickOpen, this);
         registerCommand("minecartspeed", "Configure Minecraft Custom Utilities",
                 new MinecartSpeedCommand(settings, controller, geometry));
         registerCommand("ghastspeed", "Configure ridden Happy Ghast speed",
                 new GhastSpeedCommand(ghastController));
         registerCommand("elytraslot", "Open your additional Elytra slot",
                 new ElytraSlotCommand(elytraSlot));
+        registerCommand("quickopen", "Open a held shulker box",
+                new QuickOpenCommand(quickOpen));
         registerCommand("killphantoms", "Kill nearby phantoms",
                 new KillPhantomsCommand());
         registerCommand("shulkerfind", "Find items in shulker boxes in your inventory",
@@ -54,6 +59,9 @@ public final class MinecraftCustomUtilitiesPlugin extends JavaPlugin {
         }
         if (elytraSlot != null) {
             elytraSlot.shutdown();
+        }
+        if (quickOpen != null) {
+            quickOpen.shutdown();
         }
     }
 }
