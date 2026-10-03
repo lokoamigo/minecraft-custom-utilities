@@ -70,7 +70,7 @@ final class ShulkerFindCommand implements BasicCommand {
 
         pendingTransfers.remove(player.getUniqueId());
         SearchResult result = search(player, requested);
-        if (!result.hasEnough()) {
+        if (!result.hasAny()) {
             return;
         }
 
@@ -87,7 +87,7 @@ final class ShulkerFindCommand implements BasicCommand {
         pendingTransfers.put(player.getUniqueId(), new PendingTransfer(
                 Collections.unmodifiableMap(new LinkedHashMap<>(requested)),
                 System.currentTimeMillis() + CONFIRMATION_TTL_MILLIS));
-        player.sendMessage("Move the requested items into your inventory? "
+        player.sendMessage("Move the available requested items into your inventory? "
                 + "Run the same command again within 30 seconds to confirm "
                 + "(press Up Arrow, then Enter).");
     }
@@ -166,7 +166,7 @@ final class ShulkerFindCommand implements BasicCommand {
     private static void completeTransfer(Player player, PendingTransfer pending) {
         TransferPlan plan = createTransferPlan(player, pending.requested());
         if (plan.status() == PlanStatus.MISSING_ITEMS) {
-            player.sendMessage("The requested items are no longer available. Nothing was moved.");
+            player.sendMessage("None of the requested items are available anymore. Nothing was moved.");
             return;
         }
         if (plan.status() == PlanStatus.NO_SPACE) {
@@ -175,7 +175,7 @@ final class ShulkerFindCommand implements BasicCommand {
         }
 
         player.getInventory().setStorageContents(plan.finalContents());
-        player.sendMessage("Moved " + formatAmounts(pending.requested())
+        player.sendMessage("Moved " + formatAmounts(plan.moved())
                 + " from your shulker boxes into your inventory.");
     }
 
@@ -228,6 +228,7 @@ final class ShulkerFindCommand implements BasicCommand {
             Player player, Map<Material, Integer> requested) {
         ItemStack[] finalContents = cloneContents(player.getInventory().getStorageContents());
         Map<Material, Integer> remaining = new LinkedHashMap<>(requested);
+        Map<Material, Integer> movedAmounts = new LinkedHashMap<>();
         List<ItemStack> extracted = new ArrayList<>();
 
         for (int slot = 0; slot < finalContents.length; slot++) {
@@ -247,9 +248,10 @@ final class ShulkerFindCommand implements BasicCommand {
                 }
 
                 int amount = Math.min(needed, content.getAmount());
-                ItemStack moved = content.clone();
-                moved.setAmount(amount);
-                extracted.add(moved);
+                ItemStack movedItem = content.clone();
+                movedItem.setAmount(amount);
+                extracted.add(movedItem);
+                movedAmounts.merge(content.getType(), amount, Integer::sum);
                 remaining.put(content.getType(), needed - amount);
 
                 if (amount == content.getAmount()) {
@@ -268,15 +270,16 @@ final class ShulkerFindCommand implements BasicCommand {
             }
         }
 
-        if (remaining.values().stream().anyMatch(amount -> amount > 0)) {
-            return new TransferPlan(PlanStatus.MISSING_ITEMS, null);
+        if (extracted.isEmpty()) {
+            return new TransferPlan(PlanStatus.MISSING_ITEMS, null, Map.of());
         }
         for (ItemStack item : extracted) {
             if (!addToStorage(finalContents, item)) {
-                return new TransferPlan(PlanStatus.NO_SPACE, null);
+                return new TransferPlan(PlanStatus.NO_SPACE, null, Map.of());
             }
         }
-        return new TransferPlan(PlanStatus.READY, finalContents);
+        return new TransferPlan(PlanStatus.READY, finalContents,
+                Collections.unmodifiableMap(movedAmounts));
     }
 
     private static boolean addToStorage(ItemStack[] storage, ItemStack item) {
@@ -424,13 +427,13 @@ final class ShulkerFindCommand implements BasicCommand {
     }
 
     private record SearchResult(Map<Material, Integer> totals, Map<Material, Integer> requested) {
-        private boolean hasEnough() {
-            return requested.entrySet().stream()
-                    .allMatch(entry -> totals.get(entry.getKey()) >= entry.getValue());
+        private boolean hasAny() {
+            return totals.values().stream().anyMatch(amount -> amount > 0);
         }
     }
 
-    private record TransferPlan(PlanStatus status, ItemStack[] finalContents) {
+    private record TransferPlan(
+            PlanStatus status, ItemStack[] finalContents, Map<Material, Integer> moved) {
     }
 
     private enum PlanStatus {
