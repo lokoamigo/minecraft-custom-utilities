@@ -104,9 +104,7 @@ final class ShulkerFindCommand implements BasicCommand {
                 Arrays.copyOfRange(args, requestStart, args.length - 1));
         if (type == SuggestionType.ITEM) {
             String prefix = args[args.length - 1].toLowerCase(Locale.ROOT);
-            List<String> suggestions = new ArrayList<>(Arrays.stream(Material.values())
-                    .filter(Material::isItem)
-                    .map(material -> material.getKey().toString())
+            List<String> suggestions = new ArrayList<>(suggestibleItems(source).stream()
                     .filter(name -> matchesItemName(name, prefix))
                     .toList());
             if (args.length == 1) {
@@ -149,6 +147,29 @@ final class ShulkerFindCommand implements BasicCommand {
         }
         quantities.add(available);
         return quantities.stream().map(String::valueOf).toList();
+    }
+
+    private static Collection<String> suggestibleItems(CommandSourceStack source) {
+        if (!(source.getSender() instanceof Player player)) {
+            return Arrays.stream(Material.values())
+                    .filter(Material::isItem)
+                    .map(material -> material.getKey().toString())
+                    .toList();
+        }
+
+        TreeSet<String> available = new TreeSet<>();
+        for (ItemStack item : player.getInventory().getStorageContents()) {
+            ShulkerBox shulker = getShulker(item);
+            if (shulker == null) {
+                continue;
+            }
+            for (ItemStack content : shulker.getInventory().getContents()) {
+                if (content != null && !content.getType().isAir()) {
+                    available.add(content.getType().getKey().toString());
+                }
+            }
+        }
+        return available;
     }
 
     private static int countInShulkerBoxes(Player player, Material material) {
