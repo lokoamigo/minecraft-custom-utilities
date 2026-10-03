@@ -32,6 +32,8 @@ public final class MinecraftCustomUtilitiesPlugin extends JavaPlugin {
                 new KillPhantomsCommand());
         registerCommand("shulkerfind", "Find items in shulker boxes in your inventory",
                 new ShulkerFindCommand());
+        registerCommand("mcu", "Show all Minecraft Custom Utilities commands",
+                new HelpCommand());
 
         int changed = controller.applyToAllLoadedMinecarts();
         getLogger().info(String.format(Locale.ROOT,

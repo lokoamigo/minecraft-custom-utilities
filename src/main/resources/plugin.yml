@@ -5,6 +5,9 @@ description: Raises the maximum speed of player-ridden minecarts without enablin
 api-version: '26.3'
 
 commands:
+  mcu:
+    description: Lists all Minecraft Custom Utilities commands.
+    usage: /mcu [help]
   elytraslot:
     description: Opens your additional Elytra equipment slot.
     usage: /elytraslot

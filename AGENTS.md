@@ -31,6 +31,9 @@ These instructions apply to the entire repository.
   and permissions.
 - Preserve existing command names and configuration keys unless a change explicitly
   requires a migration.
+- Keep the `/mcu help` output complete and synchronized with every user-facing
+  command, argument form, alias, and permission requirement. Any command change
+  must update the help output in the same change.
 
 ## Releases and versioning
 
