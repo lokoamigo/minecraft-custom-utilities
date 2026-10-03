@@ -72,3 +72,21 @@ These instructions apply to the entire repository.
   metadata, Docker build inputs, or release automation.
 - When behavior changes, test it on the Docker Paper server when practical with
   `make restart-test-server`, then inspect `make logs` and `make plugins`.
+
+## Live debugging
+
+- Reproduce player-facing command problems on the local Docker Paper server when
+  practical. Start with server logs to confirm the exact command and arguments
+  received before changing code.
+- Use read-only RCON queries to inspect relevant live server state. For inventory
+  problems, `data get entity <player> Inventory` and targeted inventory/component
+  paths can verify item identifiers and shulker-box contents without changing them.
+- Compare exact namespaced Minecraft identifiers, including easily confused values
+  such as `minecraft:nether_brick`, `minecraft:nether_bricks`, and
+  `minecraft:netherrack`. Do not assume a code regression until the requested ID
+  and live item data have been compared.
+- Keep diagnosis non-mutating. Do not use `data modify`, replace player inventory,
+  or otherwise alter live player data merely to investigate a problem.
+- After a fix or deployment, confirm that the container is healthy, inspect startup
+  logs for plugin errors, and verify through RCON that `MinecraftCustomUtilities`
+  is loaded.
