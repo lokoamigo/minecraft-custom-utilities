@@ -18,6 +18,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.TreeSet;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -119,8 +120,51 @@ final class ShulkerFindCommand implements BasicCommand {
             return suggestions;
         }
         String prefix = args[args.length - 1];
-        return List.of("1", "16", "32", "64").stream()
+        Collection<String> quantities = quantitySuggestions(source, args);
+        return quantities.stream()
                 .filter(value -> value.startsWith(prefix)).toList();
+    }
+
+    private static Collection<String> quantitySuggestions(
+            CommandSourceStack source, String[] args) {
+        if (!(source.getSender() instanceof Player player) || args.length < 2) {
+            return List.of("1", "16", "32", "64");
+        }
+
+        Material material = Material.matchMaterial(args[args.length - 2]);
+        if (material == null || !material.isItem()) {
+            return List.of();
+        }
+
+        int available = countInShulkerBoxes(player, material);
+        if (available == 0) {
+            return List.of();
+        }
+
+        TreeSet<Integer> quantities = new TreeSet<>();
+        for (int standard : List.of(1, 16, 32, 64)) {
+            if (standard <= available) {
+                quantities.add(standard);
+            }
+        }
+        quantities.add(available);
+        return quantities.stream().map(String::valueOf).toList();
+    }
+
+    private static int countInShulkerBoxes(Player player, Material material) {
+        int total = 0;
+        for (ItemStack item : player.getInventory().getStorageContents()) {
+            ShulkerBox shulker = getShulker(item);
+            if (shulker == null) {
+                continue;
+            }
+            for (ItemStack content : shulker.getInventory().getContents()) {
+                if (content != null && content.getType() == material) {
+                    total += content.getAmount();
+                }
+            }
+        }
+        return total;
     }
 
     private static SuggestionType suggestionType(String[] completedArgs) {
