@@ -9,7 +9,6 @@ public final class MinecraftCustomUtilitiesPlugin extends JavaPlugin {
     private GhastController ghastController;
     private ElytraSlotController elytraSlot;
     private QuickOpenController quickOpen;
-    private ShopkeeperController shopkeepers;
 
     @Override
     public void onEnable() {
@@ -26,8 +25,6 @@ public final class MinecraftCustomUtilitiesPlugin extends JavaPlugin {
         Bukkit.getPluginManager().registerEvents(elytraSlot, this);
         quickOpen = new QuickOpenController(this);
         Bukkit.getPluginManager().registerEvents(quickOpen, this);
-        shopkeepers = new ShopkeeperController(this);
-        Bukkit.getPluginManager().registerEvents(shopkeepers, this);
         registerCommand("minecartspeed", "Configure Minecraft Custom Utilities",
                 new MinecartSpeedCommand(settings, controller, geometry));
         registerCommand("ghastspeed", "Configure ridden Happy Ghast speed",
@@ -40,8 +37,6 @@ public final class MinecraftCustomUtilitiesPlugin extends JavaPlugin {
                 new KillPhantomsCommand());
         registerCommand("shulkerfind", "Find items in shulker boxes in your inventory",
                 new ShulkerFindCommand());
-        registerCommand("shopkeeper", "Configure a selected shopkeeper",
-                new ShopkeeperCommand(shopkeepers));
         registerCommand("mcu", "Show all Minecraft Custom Utilities commands",
                 new HelpCommand());
 
