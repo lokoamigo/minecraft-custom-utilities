@@ -13,7 +13,6 @@ final class HelpCommand implements BasicCommand {
             "/mcu help - Show this command list.",
             "/elytraslot - Open your additional Elytra equipment slot.",
             "/quickopen - Open the shulker box in your main hand or offhand.",
-            "/craft <item> [count] - Quick-craft using a craft-command-workbench (or right-click it).",
             "/shopkeeper price <item> <emeralds> - Price an item for the selected shopkeeper.",
             "/shopkeeper unprice <item> - Remove an item from the selected shopkeeper's offers.",
             "/shopkeeper info - List the selected shopkeeper's linked chests and prices.",
