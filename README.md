@@ -47,6 +47,48 @@ durability meter appears in the action bar above the hotbar.
 Operators can run `/killphantoms [radius]` to kill all phantoms near themselves.
 The radius defaults to 64 blocks and can be set to any value up to 256 blocks.
 
+## Command Workbench
+
+Rename a single crafting table to `craft-command-workbench` and keep it in your
+main inventory to enable quick crafting:
+
+```text
+/craft <item> [count]
+```
+
+The optional count is the number of recipe operations, so recipes may produce
+more than that number of output items. The command uses the first unlocked shaped
+or shapeless recipe that the player's inventory can satisfy. It stops safely if
+ingredients, inventory space, or workbench uses run out.
+
+Right-clicking the command workbench also opens a portable 3×3 crafting interface.
+Taking a crafted result spends one use. The interface otherwise behaves like a
+vanilla crafting table, including shift-click crafting.
+
+The workbench has 64 uses, spends one use per successful recipe operation, cannot
+be stacked or placed, and breaks after its final use. Its lore shows the exact
+remaining uses.
+
+## Player Shopkeepers
+
+Rename any shovel to `shopkeeper`, then right-click a villager to turn it into
+your shopkeeper and select it. Left-click chests with the same shovel to link or
+unlink their stock. The shovel interaction cancels block damage.
+
+Set per-item prices (in emeralds) for the selected shopkeeper with:
+
+```text
+/shopkeeper price <item> <emeralds>
+/shopkeeper unprice <item>
+/shopkeeper info
+```
+
+Other players can right-click the shopkeeper to open its store. Each purchase
+removes one matching item from a currently loaded linked chest, charges the
+configured number of emeralds, and deposits those emeralds into linked-chest
+storage. Shop ownership, links, and prices persist across server restarts in
+`plugins/MinecraftCustomUtilities/shopkeepers.yml`.
+
 ## Docker Paper Server
 
 Build and start a local Paper server with this plugin and WorldEdit:
