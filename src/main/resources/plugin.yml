@@ -14,6 +14,9 @@ commands:
   quickopen:
     description: Opens the shulker box held in your main hand or offhand.
     usage: /quickopen
+  craft:
+    description: Quick-crafts an unlocked recipe using a command workbench.
+    usage: /craft <item> [count]
   killphantoms:
     description: Kills phantoms near the player.
     usage: /killphantoms [radius]
