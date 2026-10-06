@@ -58,6 +58,9 @@ Set per-item prices (in emeralds) for the selected shopkeeper with:
 ```text
 /shopkeeper price <item> <emeralds>
 /shopkeeper unprice <item>
+/shopkeeper radius <blocks>
+/shopkeeper speed <multiplier>
+/shopkeeper name <name...>
 /shopkeeper info
 ```
 
@@ -66,6 +69,23 @@ removes one matching item from a currently loaded linked chest, charges the
 configured number of emeralds, and deposits those emeralds into linked-chest
 storage. Shop ownership, links, and prices persist across server restarts in
 `plugins/MinecraftCustomUtilities/shopkeepers.yml`.
+
+Linked chests cannot be broken by other players or explosions while their
+shopkeeper is alive. Shopkeepers have additional health, armor, and toughness,
+and deal two hearts of thorns damage to direct or ranged attackers. Killing a
+shopkeeper releases its linked chests so they can be robbed.
+
+A shopkeeper keeps its normal AI but is confined to a 5×5-block square centered
+on the position where it was promoted. Near the edge, it pathfinds naturally
+back toward the stored center. Teleporting is only used if it gets far away or
+cannot return after several seconds. Owners can configure the square's radius
+and return-walk speed per selected shopkeeper. The center and settings persist
+across restarts. Owners can also give each selected shopkeeper a persistent name,
+which is shown above the villager and as the storefront title.
+
+When any configured listing runs out of sellable stock, its owner is notified
+online. Every unavailable listing in owned shops is also reported when the owner
+joins the server.
 
 ## Docker Paper Server
 

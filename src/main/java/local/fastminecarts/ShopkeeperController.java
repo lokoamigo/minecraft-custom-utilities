@@ -6,19 +6,33 @@ import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
+import org.bukkit.Sound;
+import org.bukkit.SoundCategory;
 import org.bukkit.World;
+import org.bukkit.attribute.Attribute;
+import org.bukkit.attribute.AttributeInstance;
 import org.bukkit.block.Chest;
+import org.bukkit.block.DoubleChest;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
+import org.bukkit.entity.LivingEntity;
+import org.bukkit.entity.Projectile;
 import org.bukkit.entity.Villager;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.block.BlockBreakEvent;
+import org.bukkit.event.block.BlockExplodeEvent;
+import org.bukkit.event.entity.EntityDamageByEntityEvent;
+import org.bukkit.event.entity.EntityDeathEvent;
+import org.bukkit.event.entity.EntityExplodeEvent;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.world.ChunkLoadEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
@@ -40,6 +54,17 @@ import java.util.UUID;
 
 final class ShopkeeperController implements Listener {
     static final String TOOL_NAME = "shopkeeper";
+    static final double MIN_BOUNDARY_RADIUS = 1.0;
+    static final double MAX_BOUNDARY_RADIUS = 32.0;
+    static final double MIN_RETURN_SPEED = 0.1;
+    static final double MAX_RETURN_SPEED = 2.0;
+    private static final double DEFAULT_BOUNDARY_RADIUS = 2.5;
+    private static final double DEFAULT_RETURN_SPEED = 0.75;
+    private static final int SHOP_PATHFINDING_TIMEOUT_CHECKS = 20;
+    private static final double SHOPKEEPER_MAX_HEALTH = 40.0;
+    private static final double SHOPKEEPER_ARMOR = 12.0;
+    private static final double SHOPKEEPER_ARMOR_TOUGHNESS = 4.0;
+    private static final double THORNS_DAMAGE = 4.0;
 
     private final MinecraftCustomUtilitiesPlugin plugin;
     private final NamespacedKey shopkeeperOwnerKey;
@@ -47,6 +72,8 @@ final class ShopkeeperController implements Listener {
     private final File dataFile;
     private final Map<UUID, Shop> shops = new HashMap<>();
     private final Map<UUID, UUID> selectedShops = new HashMap<>();
+    private final Map<UUID, Integer> boundaryReturnChecks = new HashMap<>();
+    private final Map<UUID, Set<Material>> unavailableListingStates = new HashMap<>();
 
     ShopkeeperController(MinecraftCustomUtilitiesPlugin plugin) {
         this.plugin = plugin;
@@ -54,6 +81,30 @@ final class ShopkeeperController implements Listener {
         offerMaterialKey = new NamespacedKey(plugin, "shopkeeper-offer-material");
         dataFile = new File(plugin.getDataFolder(), "shopkeepers.yml");
         load();
+        boolean migratedCenter = false;
+        for (World world : Bukkit.getWorlds()) {
+            for (Villager villager : world.getEntitiesByClass(Villager.class)) {
+                if (owner(villager) == null) {
+                    continue;
+                }
+                applyShopkeeperProtection(villager);
+                Shop shop = shops.get(villager.getUniqueId());
+                if (shop != null) {
+                    applyShopkeeperName(villager, shop);
+                }
+                if (shop != null && shop.center == null) {
+                    shop.center = ShopCenter.from(villager.getLocation());
+                    migratedCenter = true;
+                }
+            }
+        }
+        if (migratedCenter) {
+            save();
+        }
+        plugin.getServer().getScheduler().runTaskTimer(plugin, () -> {
+            enforceShopkeeperBoundaries();
+            checkUnavailableListingTransitions();
+        }, 10L, 10L);
     }
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
@@ -78,12 +129,20 @@ final class ShopkeeperController implements Listener {
                 villager.setCustomNameVisible(true);
                 villager.setPersistent(true);
                 villager.setRecipes(List.of());
-                shops.put(villager.getUniqueId(), new Shop(owner));
+                applyShopkeeperProtection(villager);
+                villager.setHealth(SHOPKEEPER_MAX_HEALTH);
+                shops.put(villager.getUniqueId(),
+                        new Shop(owner, ShopCenter.from(villager.getLocation())));
                 save();
                 player.sendMessage("Villager transformed into your shopkeeper.");
             } else {
+                applyShopkeeperProtection(villager);
                 if (!shops.containsKey(villager.getUniqueId())) {
-                    shops.put(villager.getUniqueId(), new Shop(owner));
+                    shops.put(villager.getUniqueId(),
+                            new Shop(owner, ShopCenter.from(villager.getLocation())));
+                    save();
+                } else if (shops.get(villager.getUniqueId()).center == null) {
+                    shops.get(villager.getUniqueId()).center = ShopCenter.from(villager.getLocation());
                     save();
                 }
                 player.sendMessage("Shopkeeper selected.");
@@ -102,14 +161,24 @@ final class ShopkeeperController implements Listener {
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onChestInteract(PlayerInteractEvent event) {
         if (event.getHand() != EquipmentSlot.HAND
-                || !event.getAction().isLeftClick()
-                || !isShopkeeperTool(event.getItem())
                 || event.getClickedBlock() == null
-                || !(event.getClickedBlock().getState() instanceof Chest)) {
+                || !(event.getClickedBlock().getState() instanceof Chest chest)) {
             return;
         }
 
         Player player = event.getPlayer();
+        Set<BlockLocation> locations = chestLocations(chest);
+        List<Shop> linked = linkedShops(locations);
+        if (event.getAction().isRightClick() && linked.stream()
+                .anyMatch(shop -> !shop.owner.equals(player.getUniqueId()))) {
+            event.setCancelled(true);
+            player.sendMessage("That chest is locked while its shopkeeper is alive.");
+            return;
+        }
+        if (!event.getAction().isLeftClick() || !isShopkeeperTool(event.getItem())) {
+            return;
+        }
+
         Shop shop = selectedOwnedShop(player);
         if (shop == null) {
             player.sendMessage("First right-click your shopkeeper with the shopkeeper shovel.");
@@ -118,14 +187,100 @@ final class ShopkeeperController implements Listener {
         }
 
         event.setCancelled(true);
-        BlockLocation location = BlockLocation.from(event.getClickedBlock().getLocation());
-        if (shop.chests.remove(location)) {
+        if (shop.chests.removeAll(locations)) {
             player.sendMessage("Chest unlinked from the selected shopkeeper.");
         } else {
-            shop.chests.add(location);
+            shop.chests.addAll(locations);
             player.sendMessage("Chest linked to the selected shopkeeper.");
         }
         save();
+    }
+
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onLinkedChestBreak(BlockBreakEvent event) {
+        if (!(event.getBlock().getState() instanceof Chest chest)) {
+            return;
+        }
+        Set<BlockLocation> locations = chestLocations(chest);
+        List<Shop> linked = linkedShops(locations);
+        if (linked.isEmpty()) {
+            return;
+        }
+        if (linked.stream().anyMatch(shop -> !shop.owner.equals(event.getPlayer().getUniqueId()))) {
+            event.setCancelled(true);
+            event.getPlayer().sendMessage(
+                    "That chest is protected while its shopkeeper is alive. Kill the shopkeeper to rob it.");
+            return;
+        }
+        linked.forEach(shop -> shop.chests.removeAll(locations));
+        save();
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    public void onEntityExplode(EntityExplodeEvent event) {
+        event.blockList().removeIf(this::isProtectedChest);
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    public void onBlockExplode(BlockExplodeEvent event) {
+        event.blockList().removeIf(this::isProtectedChest);
+    }
+
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onShopkeeperDamaged(EntityDamageByEntityEvent event) {
+        if (!(event.getEntity() instanceof Villager villager)
+                || (!shops.containsKey(villager.getUniqueId()) && owner(villager) == null)) {
+            return;
+        }
+        LivingEntity attacker = attacker(event);
+        if (attacker != null && !attacker.isDead()) {
+            plugin.getServer().getScheduler().runTask(plugin, () -> {
+                if (attacker.isValid() && !attacker.isDead()) {
+                    applyThornsDamage(attacker);
+                }
+            });
+        }
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onShopkeeperDeath(EntityDeathEvent event) {
+        if (!(event.getEntity() instanceof Villager villager) || owner(villager) == null) {
+            return;
+        }
+        UUID shopId = villager.getUniqueId();
+        if (shops.remove(shopId) != null) {
+            selectedShops.values().removeIf(shopId::equals);
+            boundaryReturnChecks.remove(shopId);
+            unavailableListingStates.remove(shopId);
+            save();
+        }
+    }
+
+    @EventHandler
+    public void onChunkLoad(ChunkLoadEvent event) {
+        for (org.bukkit.entity.Entity entity : event.getChunk().getEntities()) {
+            if (entity instanceof Villager villager && owner(villager) != null) {
+                applyShopkeeperProtection(villager);
+                Shop shop = shops.get(villager.getUniqueId());
+                if (shop != null) {
+                    applyShopkeeperName(villager, shop);
+                }
+            }
+        }
+    }
+
+    @EventHandler
+    public void onPlayerJoin(PlayerJoinEvent event) {
+        Player player = event.getPlayer();
+        plugin.getServer().getScheduler().runTask(plugin, () -> shops.entrySet().stream()
+                .filter(entry -> entry.getValue().owner.equals(player.getUniqueId()))
+                .forEach(entry -> {
+                    Set<Material> unavailable = unavailableListings(entry.getValue(), true);
+                    if (unavailable != null) {
+                        unavailable.forEach(material -> notifyUnavailable(
+                                player, entry.getValue(), material));
+                    }
+                }));
     }
 
     @EventHandler(ignoreCancelled = true)
@@ -184,6 +339,51 @@ final class ShopkeeperController implements Listener {
         return true;
     }
 
+    boolean setBoundaryRadius(Player player, double radius) {
+        Shop shop = selectedOwnedShop(player);
+        if (shop == null) {
+            player.sendMessage("Select your shopkeeper by right-clicking it with the shopkeeper shovel.");
+            return false;
+        }
+        shop.boundaryRadius = radius;
+        boundaryReturnChecks.remove(selectedShops.get(player.getUniqueId()));
+        save();
+        player.sendMessage(String.format(Locale.ROOT,
+                "Shopkeeper radius set to %.2f blocks (%.2f × %.2f square).",
+                radius, radius * 2.0, radius * 2.0));
+        return true;
+    }
+
+    boolean setReturnSpeed(Player player, double speed) {
+        Shop shop = selectedOwnedShop(player);
+        if (shop == null) {
+            player.sendMessage("Select your shopkeeper by right-clicking it with the shopkeeper shovel.");
+            return false;
+        }
+        shop.returnSpeed = speed;
+        save();
+        player.sendMessage(String.format(Locale.ROOT,
+                "Shopkeeper return speed set to %.2f.", speed));
+        return true;
+    }
+
+    boolean setName(Player player, String name) {
+        UUID shopId = selectedShops.get(player.getUniqueId());
+        Shop shop = selectedOwnedShop(player);
+        if (shop == null || shopId == null) {
+            player.sendMessage("Select your shopkeeper by right-clicking it with the shopkeeper shovel.");
+            return false;
+        }
+        shop.name = name;
+        org.bukkit.entity.Entity entity = Bukkit.getEntity(shopId);
+        if (entity instanceof Villager villager) {
+            applyShopkeeperName(villager, shop);
+        }
+        save();
+        player.sendMessage("Shopkeeper renamed to " + name + ".");
+        return true;
+    }
+
     void describe(Player player) {
         Shop shop = selectedOwnedShop(player);
         if (shop == null) {
@@ -192,6 +392,10 @@ final class ShopkeeperController implements Listener {
         }
         player.sendMessage("Selected shopkeeper: " + shop.chests.size() + " linked chest block(s), "
                 + shop.prices.size() + " configured price(s).");
+        player.sendMessage(String.format(Locale.ROOT,
+                "Boundary radius: %.2f blocks; return speed: %.2f.",
+                shop.boundaryRadius, shop.returnSpeed));
+        player.sendMessage("Name: " + shop.name + ".");
         shop.prices.entrySet().stream()
                 .sorted(Map.Entry.comparingByKey())
                 .forEach(entry -> player.sendMessage("- " + entry.getKey().getKey() + ": "
@@ -206,7 +410,7 @@ final class ShopkeeperController implements Listener {
         }
         Map<Material, Stock> stock = stock(shop);
         StoreHolder holder = new StoreHolder(shopId);
-        Inventory inventory = Bukkit.createInventory(holder, 54, Component.text("Shopkeeper"));
+        Inventory inventory = Bukkit.createInventory(holder, 54, Component.text(shop.name));
         holder.inventory = inventory;
 
         int slot = 0;
@@ -267,6 +471,7 @@ final class ShopkeeperController implements Listener {
         storePayment(shop, price);
         player.getInventory().addItem(product);
         player.sendMessage("Bought 1 " + material.getKey() + " for " + price + " emerald(s).");
+        updateUnavailableState(shopId, shop, true, material);
         openStore(player, shopId);
     }
 
@@ -340,6 +545,182 @@ final class ShopkeeperController implements Listener {
             }
         }
         return List.copyOf(result);
+    }
+
+    private List<Shop> linkedShops(Set<BlockLocation> locations) {
+        return shops.values().stream()
+                .filter(shop -> shop.chests.stream().anyMatch(locations::contains))
+                .toList();
+    }
+
+    private boolean isProtectedChest(org.bukkit.block.Block block) {
+        if (block.getState() instanceof Chest chest) {
+            return !linkedShops(chestLocations(chest)).isEmpty();
+        }
+        return false;
+    }
+
+    private static Set<BlockLocation> chestLocations(Chest chest) {
+        Set<BlockLocation> locations = new LinkedHashSet<>();
+        InventoryHolder holder = chest.getInventory().getHolder(false);
+        if (holder instanceof DoubleChest doubleChest) {
+            addChestLocation(locations, doubleChest.getLeftSide(false));
+            addChestLocation(locations, doubleChest.getRightSide(false));
+        } else {
+            locations.add(BlockLocation.from(chest.getLocation()));
+        }
+        return locations;
+    }
+
+    private static void addChestLocation(Set<BlockLocation> locations, InventoryHolder holder) {
+        if (holder instanceof Chest chest) {
+            locations.add(BlockLocation.from(chest.getLocation()));
+        }
+    }
+
+    private static LivingEntity attacker(EntityDamageByEntityEvent event) {
+        if (event.getDamager() instanceof LivingEntity living) {
+            return living;
+        }
+        if (event.getDamager() instanceof Projectile projectile
+                && projectile.getShooter() instanceof LivingEntity living) {
+            return living;
+        }
+        return null;
+    }
+
+    private static void applyThornsDamage(LivingEntity attacker) {
+        double remaining = THORNS_DAMAGE;
+        double absorption = attacker.getAbsorptionAmount();
+        if (absorption > 0.0) {
+            double absorbed = Math.min(absorption, remaining);
+            attacker.setAbsorptionAmount(absorption - absorbed);
+            remaining -= absorbed;
+        }
+        if (remaining > 0.0) {
+            attacker.setHealth(Math.max(0.0, attacker.getHealth() - remaining));
+        }
+        attacker.playHurtAnimation(0.0F);
+        if (attacker instanceof Player player) {
+            player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_HURT,
+                    SoundCategory.PLAYERS, 1.0F, 1.0F);
+        }
+    }
+
+    private static void applyShopkeeperProtection(Villager villager) {
+        setAttribute(villager, Attribute.MAX_HEALTH, SHOPKEEPER_MAX_HEALTH);
+        setAttribute(villager, Attribute.ARMOR, SHOPKEEPER_ARMOR);
+        setAttribute(villager, Attribute.ARMOR_TOUGHNESS, SHOPKEEPER_ARMOR_TOUGHNESS);
+    }
+
+    private static void applyShopkeeperName(Villager villager, Shop shop) {
+        villager.customName(Component.text(shop.name));
+        villager.setCustomNameVisible(true);
+    }
+
+    private static void setAttribute(Villager villager, Attribute attribute, double value) {
+        AttributeInstance instance = villager.getAttribute(attribute);
+        if (instance != null) {
+            instance.setBaseValue(value);
+        }
+    }
+
+    private void enforceShopkeeperBoundaries() {
+        for (Map.Entry<UUID, Shop> entry : shops.entrySet()) {
+            ShopCenter center = entry.getValue().center;
+            org.bukkit.entity.Entity entity = Bukkit.getEntity(entry.getKey());
+            if (center == null || !(entity instanceof Villager villager) || !villager.isValid()) {
+                continue;
+            }
+            Location location = villager.getLocation();
+            World world = Bukkit.getWorld(center.world);
+            if (world == null) {
+                continue;
+            }
+            Location target = new Location(world, center.x, center.y, center.z,
+                    location.getYaw(), location.getPitch());
+            if (!center.world.equals(location.getWorld().getName())) {
+                villager.teleport(target);
+                boundaryReturnChecks.remove(entry.getKey());
+                continue;
+            }
+
+            double xDistance = Math.abs(location.getX() - center.x);
+            double zDistance = Math.abs(location.getZ() - center.z);
+            double returnThreshold = Math.max(0.5, entry.getValue().boundaryRadius - 0.5);
+            if (xDistance <= returnThreshold && zDistance <= returnThreshold) {
+                boundaryReturnChecks.remove(entry.getKey());
+                continue;
+            }
+
+            int checks = boundaryReturnChecks.merge(entry.getKey(), 1, Integer::sum);
+            double teleportThreshold = Math.max(entry.getValue().boundaryRadius * 3.0,
+                    entry.getValue().boundaryRadius + 5.0);
+            if (xDistance > teleportThreshold || zDistance > teleportThreshold
+                    || checks >= SHOP_PATHFINDING_TIMEOUT_CHECKS) {
+                villager.teleport(target);
+                boundaryReturnChecks.remove(entry.getKey());
+            } else {
+                villager.getPathfinder().moveTo(target, entry.getValue().returnSpeed);
+            }
+        }
+    }
+
+    private void checkUnavailableListingTransitions() {
+        for (Map.Entry<UUID, Shop> entry : shops.entrySet()) {
+            updateUnavailableState(entry.getKey(), entry.getValue(), false, null);
+        }
+    }
+
+    private void updateUnavailableState(UUID shopId, Shop shop, boolean loadChunks,
+                                        Material forcedListing) {
+        Set<Material> unavailable = unavailableListings(shop, loadChunks);
+        if (unavailable == null) {
+            return;
+        }
+        Set<Material> previous = unavailableListingStates.put(shopId, Set.copyOf(unavailable));
+        Set<Material> newlyUnavailable = new LinkedHashSet<>(unavailable);
+        if (previous != null) {
+            newlyUnavailable.removeAll(previous);
+        } else if (forcedListing == null) {
+            newlyUnavailable.clear();
+        } else {
+            newlyUnavailable.retainAll(Set.of(forcedListing));
+        }
+        Player owner = Bukkit.getPlayer(shop.owner);
+        if (owner != null && owner.isOnline()) {
+            newlyUnavailable.forEach(material -> notifyUnavailable(owner, shop, material));
+        }
+    }
+
+    private Set<Material> unavailableListings(Shop shop, boolean loadChunks) {
+        if (shop.prices.isEmpty()) {
+            return Set.of();
+        }
+        if (shop.chests.isEmpty()) {
+            return Set.copyOf(shop.prices.keySet());
+        }
+        for (BlockLocation location : shop.chests) {
+            World world = Bukkit.getWorld(location.world);
+            if (world == null) {
+                continue;
+            }
+            if (!world.isChunkLoaded(location.x >> 4, location.z >> 4)) {
+                if (!loadChunks) {
+                    return null;
+                }
+                world.getChunkAt(location.x >> 4, location.z >> 4);
+            }
+        }
+        Map<Material, Stock> available = stock(shop);
+        Set<Material> unavailable = new LinkedHashSet<>(shop.prices.keySet());
+        unavailable.removeAll(available.keySet());
+        return unavailable;
+    }
+
+    private static void notifyUnavailable(Player owner, Shop shop, Material material) {
+        owner.sendMessage("Your shopkeeper " + shop.name + " is out of stock for "
+                + material.getKey() + ".");
     }
 
     private Shop selectedOwnedShop(Player player) {
@@ -418,7 +799,14 @@ final class ShopkeeperController implements Listener {
                 UUID id = UUID.fromString(idText);
                 ConfigurationSection section = root.getConfigurationSection(idText);
                 UUID owner = UUID.fromString(section.getString("owner", ""));
-                Shop shop = new Shop(owner);
+                Shop shop = new Shop(owner, ShopCenter.read(section.getConfigurationSection("center")));
+                shop.name = section.getString("name", "Shopkeeper");
+                shop.boundaryRadius = bounded(section.getDouble(
+                        "boundary-radius", DEFAULT_BOUNDARY_RADIUS),
+                        MIN_BOUNDARY_RADIUS, MAX_BOUNDARY_RADIUS, DEFAULT_BOUNDARY_RADIUS);
+                shop.returnSpeed = bounded(section.getDouble(
+                        "return-speed", DEFAULT_RETURN_SPEED),
+                        MIN_RETURN_SPEED, MAX_RETURN_SPEED, DEFAULT_RETURN_SPEED);
                 for (String encoded : section.getStringList("chests")) {
                     BlockLocation location = BlockLocation.parse(encoded);
                     if (location != null) {
@@ -448,6 +836,15 @@ final class ShopkeeperController implements Listener {
             String path = "shops." + entry.getKey();
             Shop shop = entry.getValue();
             data.set(path + ".owner", shop.owner.toString());
+            data.set(path + ".name", shop.name);
+            if (shop.center != null) {
+                data.set(path + ".center.world", shop.center.world);
+                data.set(path + ".center.x", shop.center.x);
+                data.set(path + ".center.y", shop.center.y);
+                data.set(path + ".center.z", shop.center.z);
+            }
+            data.set(path + ".boundary-radius", shop.boundaryRadius);
+            data.set(path + ".return-speed", shop.returnSpeed);
             data.set(path + ".chests", shop.chests.stream().map(BlockLocation::encode).toList());
             for (Map.Entry<Material, Integer> price : shop.prices.entrySet()) {
                 data.set(path + ".prices." + price.getKey().getKey().getKey(), price.getValue());
@@ -462,11 +859,36 @@ final class ShopkeeperController implements Listener {
 
     private static final class Shop {
         private final UUID owner;
+        private ShopCenter center;
+        private String name = "Shopkeeper";
+        private double boundaryRadius = DEFAULT_BOUNDARY_RADIUS;
+        private double returnSpeed = DEFAULT_RETURN_SPEED;
         private final Set<BlockLocation> chests = new LinkedHashSet<>();
         private final Map<Material, Integer> prices = new LinkedHashMap<>();
 
-        private Shop(UUID owner) {
+        private Shop(UUID owner, ShopCenter center) {
             this.owner = owner;
+            this.center = center;
+        }
+    }
+
+    private static double bounded(double value, double minimum, double maximum, double fallback) {
+        return Double.isFinite(value) && value >= minimum && value <= maximum ? value : fallback;
+    }
+
+
+    private record ShopCenter(String world, double x, double y, double z) {
+        private static ShopCenter from(Location location) {
+            return new ShopCenter(location.getWorld().getName(),
+                    location.getX(), location.getY(), location.getZ());
+        }
+
+        private static ShopCenter read(ConfigurationSection section) {
+            if (section == null || !section.isString("world")) {
+                return null;
+            }
+            return new ShopCenter(section.getString("world"), section.getDouble("x"),
+                    section.getDouble("y"), section.getDouble("z"));
         }
     }
 
