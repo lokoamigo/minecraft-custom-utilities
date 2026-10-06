@@ -13,6 +13,7 @@ final class HelpCommand implements BasicCommand {
             "/mcu help - Show this command list.",
             "/elytraslot - Open your additional Elytra equipment slot.",
             "/quickopen - Open the shulker box in your main hand or offhand.",
+            "/craft <item> [count] - Quick-craft using a craft-command-workbench (or right-click it).",
             "/shulkerfind <item> [quantity] [<item> [quantity] ...] - Move up to the requested amounts from shulker boxes.",
             "/shulkerfind locate <item> [quantity] [<item> [quantity] ...] - Find items without moving them.",
             "/killphantoms [radius] - Kill nearby phantoms. (admin)",

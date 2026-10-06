@@ -9,6 +9,7 @@ public final class MinecraftCustomUtilitiesPlugin extends JavaPlugin {
     private GhastController ghastController;
     private ElytraSlotController elytraSlot;
     private QuickOpenController quickOpen;
+    private CraftCommandWorkbench craftCommandWorkbench;
 
     @Override
     public void onEnable() {
@@ -25,6 +26,8 @@ public final class MinecraftCustomUtilitiesPlugin extends JavaPlugin {
         Bukkit.getPluginManager().registerEvents(elytraSlot, this);
         quickOpen = new QuickOpenController(this);
         Bukkit.getPluginManager().registerEvents(quickOpen, this);
+        craftCommandWorkbench = new CraftCommandWorkbench(this);
+        Bukkit.getPluginManager().registerEvents(craftCommandWorkbench, this);
         registerCommand("minecartspeed", "Configure Minecraft Custom Utilities",
                 new MinecartSpeedCommand(settings, controller, geometry));
         registerCommand("ghastspeed", "Configure ridden Happy Ghast speed",
@@ -37,6 +40,8 @@ public final class MinecraftCustomUtilitiesPlugin extends JavaPlugin {
                 new KillPhantomsCommand());
         registerCommand("shulkerfind", "Find items in shulker boxes in your inventory",
                 new ShulkerFindCommand());
+        registerCommand("craft", "Quick-craft using a command workbench",
+                new CraftCommand(craftCommandWorkbench));
         registerCommand("mcu", "Show all Minecraft Custom Utilities commands",
                 new HelpCommand());
 
