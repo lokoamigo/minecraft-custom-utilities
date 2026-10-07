@@ -11,7 +11,7 @@ import java.util.List;
 import java.util.Locale;
 
 final class ShopkeeperCommand implements BasicCommand {
-    private static final String USAGE = "Usage: /shopkeeper <price <item> <emeralds>|unprice <item>|radius <blocks>|speed <multiplier>|name <name...>|info>";
+    private static final String USAGE = "Usage: /shopkeeper <price <item> <emeralds>|unprice <item>|radius <blocks>|speed <multiplier>|health <points>|name <name...>|info>";
 
     private final ShopkeeperController controller;
 
@@ -68,11 +68,21 @@ final class ShopkeeperCommand implements BasicCommand {
         }
         if (args.length == 2 && args[0].equalsIgnoreCase("speed")) {
             Double speed = number(args[1]);
-            if (speed == null || speed < ShopkeeperController.MIN_RETURN_SPEED
-                    || speed > ShopkeeperController.MAX_RETURN_SPEED) {
+            if (speed == null || speed < ShopkeeperController.MIN_MOVEMENT_SPEED
+                    || speed > ShopkeeperController.MAX_MOVEMENT_SPEED) {
                 player.sendMessage("Speed must be between 0.1 and 2.0.");
             } else {
-                controller.setReturnSpeed(player, speed);
+                controller.setMovementSpeed(player, speed);
+            }
+            return;
+        }
+        if (args.length == 2 && args[0].equalsIgnoreCase("health")) {
+            Double health = number(args[1]);
+            if (health == null || health < ShopkeeperController.MIN_MAX_HEALTH
+                    || health > ShopkeeperController.MAX_MAX_HEALTH) {
+                player.sendMessage("Maximum health must be between 1 and 1024 health points.");
+            } else {
+                controller.setMaxHealth(player, health);
             }
             return;
         }
@@ -93,7 +103,7 @@ final class ShopkeeperCommand implements BasicCommand {
     public Collection<String> suggest(CommandSourceStack source, String[] args) {
         if (args.length <= 1) {
             String prefix = args.length == 0 ? "" : args[0].toLowerCase(Locale.ROOT);
-            return List.of("price", "unprice", "radius", "speed", "name", "info").stream()
+            return List.of("price", "unprice", "radius", "speed", "health", "name", "info").stream()
                     .filter(value -> value.startsWith(prefix)).toList();
         }
         if (args.length == 2 && (args[0].equalsIgnoreCase("price")
@@ -116,6 +126,10 @@ final class ShopkeeperCommand implements BasicCommand {
         }
         if (args.length == 2 && args[0].equalsIgnoreCase("speed")) {
             return List.of("0.25", "0.5", "0.75", "1.0", "1.5", "2.0").stream()
+                    .filter(value -> value.startsWith(args[1])).toList();
+        }
+        if (args.length == 2 && args[0].equalsIgnoreCase("health")) {
+            return List.of("20", "40", "80", "100", "200", "1024").stream()
                     .filter(value -> value.startsWith(args[1])).toList();
         }
         return List.of();

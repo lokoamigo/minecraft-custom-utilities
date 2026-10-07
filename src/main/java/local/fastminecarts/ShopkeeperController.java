@@ -56,12 +56,14 @@ final class ShopkeeperController implements Listener {
     static final String TOOL_NAME = "shopkeeper";
     static final double MIN_BOUNDARY_RADIUS = 1.0;
     static final double MAX_BOUNDARY_RADIUS = 32.0;
-    static final double MIN_RETURN_SPEED = 0.1;
-    static final double MAX_RETURN_SPEED = 2.0;
+    static final double MIN_MOVEMENT_SPEED = 0.1;
+    static final double MAX_MOVEMENT_SPEED = 2.0;
+    static final double MIN_MAX_HEALTH = 1.0;
+    static final double MAX_MAX_HEALTH = 1024.0;
     private static final double DEFAULT_BOUNDARY_RADIUS = 2.5;
-    private static final double DEFAULT_RETURN_SPEED = 0.75;
+    private static final double DEFAULT_MOVEMENT_SPEED = 0.75;
     private static final int SHOP_PATHFINDING_TIMEOUT_CHECKS = 20;
-    private static final double SHOPKEEPER_MAX_HEALTH = 40.0;
+    private static final double DEFAULT_MAX_HEALTH = 40.0;
     private static final double SHOPKEEPER_ARMOR = 12.0;
     private static final double SHOPKEEPER_ARMOR_TOUGHNESS = 4.0;
     private static final double THORNS_DAMAGE = 4.0;
@@ -87,9 +89,11 @@ final class ShopkeeperController implements Listener {
                 if (owner(villager) == null) {
                     continue;
                 }
-                applyShopkeeperProtection(villager);
                 Shop shop = shops.get(villager.getUniqueId());
+                applyShopkeeperProtection(villager,
+                        shop == null ? DEFAULT_MAX_HEALTH : shop.maxHealth);
                 if (shop != null) {
+                    applyShopkeeperMovement(villager, shop);
                     applyShopkeeperName(villager, shop);
                 }
                 if (shop != null && shop.center == null) {
@@ -129,14 +133,14 @@ final class ShopkeeperController implements Listener {
                 villager.setCustomNameVisible(true);
                 villager.setPersistent(true);
                 villager.setRecipes(List.of());
-                applyShopkeeperProtection(villager);
-                villager.setHealth(SHOPKEEPER_MAX_HEALTH);
-                shops.put(villager.getUniqueId(),
-                        new Shop(owner, ShopCenter.from(villager.getLocation())));
+                Shop shop = new Shop(owner, ShopCenter.from(villager.getLocation()));
+                shops.put(villager.getUniqueId(), shop);
+                applyShopkeeperProtection(villager, shop.maxHealth);
+                applyShopkeeperMovement(villager, shop);
+                villager.setHealth(shop.maxHealth);
                 save();
                 player.sendMessage("Villager transformed into your shopkeeper.");
             } else {
-                applyShopkeeperProtection(villager);
                 if (!shops.containsKey(villager.getUniqueId())) {
                     shops.put(villager.getUniqueId(),
                             new Shop(owner, ShopCenter.from(villager.getLocation())));
@@ -145,6 +149,8 @@ final class ShopkeeperController implements Listener {
                     shops.get(villager.getUniqueId()).center = ShopCenter.from(villager.getLocation());
                     save();
                 }
+                applyShopkeeperProtection(villager, shops.get(villager.getUniqueId()).maxHealth);
+                applyShopkeeperMovement(villager, shops.get(villager.getUniqueId()));
                 player.sendMessage("Shopkeeper selected.");
             }
             selectedShops.put(player.getUniqueId(), villager.getUniqueId());
@@ -260,9 +266,10 @@ final class ShopkeeperController implements Listener {
     public void onChunkLoad(ChunkLoadEvent event) {
         for (org.bukkit.entity.Entity entity : event.getChunk().getEntities()) {
             if (entity instanceof Villager villager && owner(villager) != null) {
-                applyShopkeeperProtection(villager);
                 Shop shop = shops.get(villager.getUniqueId());
                 if (shop != null) {
+                    applyShopkeeperProtection(villager, shop.maxHealth);
+                    applyShopkeeperMovement(villager, shop);
                     applyShopkeeperName(villager, shop);
                 }
             }
@@ -274,6 +281,7 @@ final class ShopkeeperController implements Listener {
         Player player = event.getPlayer();
         plugin.getServer().getScheduler().runTask(plugin, () -> shops.entrySet().stream()
                 .filter(entry -> entry.getValue().owner.equals(player.getUniqueId()))
+                .filter(entry -> isLiveShopkeeper(entry.getKey(), entry.getValue(), true))
                 .forEach(entry -> {
                     Set<Material> unavailable = unavailableListings(entry.getValue(), true);
                     if (unavailable != null) {
@@ -346,7 +354,12 @@ final class ShopkeeperController implements Listener {
             return false;
         }
         shop.boundaryRadius = radius;
-        boundaryReturnChecks.remove(selectedShops.get(player.getUniqueId()));
+        UUID shopId = selectedShops.get(player.getUniqueId());
+        boundaryReturnChecks.remove(shopId);
+        org.bukkit.entity.Entity entity = Bukkit.getEntity(shopId);
+        if (entity instanceof Villager villager) {
+            applyShopkeeperMovement(villager, shop);
+        }
         save();
         player.sendMessage(String.format(Locale.ROOT,
                 "Shopkeeper radius set to %.2f blocks (%.2f × %.2f square).",
@@ -354,16 +367,42 @@ final class ShopkeeperController implements Listener {
         return true;
     }
 
-    boolean setReturnSpeed(Player player, double speed) {
+    boolean setMovementSpeed(Player player, double speed) {
         Shop shop = selectedOwnedShop(player);
         if (shop == null) {
             player.sendMessage("Select your shopkeeper by right-clicking it with the shopkeeper shovel.");
             return false;
         }
-        shop.returnSpeed = speed;
+        shop.movementSpeed = speed;
+        UUID shopId = selectedShops.get(player.getUniqueId());
+        org.bukkit.entity.Entity entity = Bukkit.getEntity(shopId);
+        if (entity instanceof Villager villager) {
+            applyShopkeeperMovement(villager, shop);
+        }
         save();
         player.sendMessage(String.format(Locale.ROOT,
-                "Shopkeeper return speed set to %.2f.", speed));
+                "Shopkeeper movement speed set to %.2f×.", speed));
+        return true;
+    }
+
+    boolean setMaxHealth(Player player, double maxHealth) {
+        UUID shopId = selectedShops.get(player.getUniqueId());
+        Shop shop = selectedOwnedShop(player);
+        if (shop == null || shopId == null) {
+            player.sendMessage("Select your shopkeeper by right-clicking it with the shopkeeper shovel.");
+            return false;
+        }
+        org.bukkit.entity.Entity entity = Bukkit.getEntity(shopId);
+        if (!(entity instanceof Villager villager) || !villager.isValid() || villager.isDead()) {
+            player.sendMessage("The selected shopkeeper is not currently available.");
+            return false;
+        }
+        shop.maxHealth = maxHealth;
+        applyShopkeeperProtection(villager, maxHealth);
+        villager.setHealth(maxHealth);
+        save();
+        player.sendMessage(String.format(Locale.ROOT,
+                "Shopkeeper maximum health set to %.1f health points.", maxHealth));
         return true;
     }
 
@@ -393,8 +432,8 @@ final class ShopkeeperController implements Listener {
         player.sendMessage("Selected shopkeeper: " + shop.chests.size() + " linked chest block(s), "
                 + shop.prices.size() + " configured price(s).");
         player.sendMessage(String.format(Locale.ROOT,
-                "Boundary radius: %.2f blocks; return speed: %.2f.",
-                shop.boundaryRadius, shop.returnSpeed));
+                "Boundary radius: %.2f blocks; movement speed: %.2f×; maximum health: %.1f.",
+                shop.boundaryRadius, shop.movementSpeed, shop.maxHealth));
         player.sendMessage("Name: " + shop.name + ".");
         shop.prices.entrySet().stream()
                 .sorted(Map.Entry.comparingByKey())
@@ -607,8 +646,10 @@ final class ShopkeeperController implements Listener {
         }
     }
 
-    private static void applyShopkeeperProtection(Villager villager) {
-        setAttribute(villager, Attribute.MAX_HEALTH, SHOPKEEPER_MAX_HEALTH);
+    private static void applyShopkeeperProtection(Villager villager, double maxHealth) {
+        villager.setPersistent(true);
+        villager.setRemoveWhenFarAway(false);
+        setAttribute(villager, Attribute.MAX_HEALTH, maxHealth);
         setAttribute(villager, Attribute.ARMOR, SHOPKEEPER_ARMOR);
         setAttribute(villager, Attribute.ARMOR_TOUGHNESS, SHOPKEEPER_ARMOR_TOUGHNESS);
     }
@@ -616,6 +657,15 @@ final class ShopkeeperController implements Listener {
     private static void applyShopkeeperName(Villager villager, Shop shop) {
         villager.customName(Component.text(shop.name));
         villager.setCustomNameVisible(true);
+    }
+
+    private static void applyShopkeeperMovement(Villager villager, Shop shop) {
+        AttributeInstance movement = villager.getAttribute(Attribute.MOVEMENT_SPEED);
+        if (movement != null) {
+            double multiplier = shop.boundaryRadius <= MIN_BOUNDARY_RADIUS
+                    ? 0.0 : shop.movementSpeed;
+            movement.setBaseValue(movement.getDefaultValue() * multiplier);
+        }
     }
 
     private static void setAttribute(Villager villager, Attribute attribute, double value) {
@@ -645,6 +695,15 @@ final class ShopkeeperController implements Listener {
                 continue;
             }
 
+            if (entry.getValue().boundaryRadius <= MIN_BOUNDARY_RADIUS) {
+                villager.getPathfinder().stopPathfinding();
+                if (location.distanceSquared(target) > 0.01) {
+                    villager.teleport(target);
+                }
+                boundaryReturnChecks.remove(entry.getKey());
+                continue;
+            }
+
             double xDistance = Math.abs(location.getX() - center.x);
             double zDistance = Math.abs(location.getZ() - center.z);
             double returnThreshold = Math.max(0.5, entry.getValue().boundaryRadius - 0.5);
@@ -661,7 +720,7 @@ final class ShopkeeperController implements Listener {
                 villager.teleport(target);
                 boundaryReturnChecks.remove(entry.getKey());
             } else {
-                villager.getPathfinder().moveTo(target, entry.getValue().returnSpeed);
+                villager.getPathfinder().moveTo(target, 1.0);
             }
         }
     }
@@ -674,6 +733,10 @@ final class ShopkeeperController implements Listener {
 
     private void updateUnavailableState(UUID shopId, Shop shop, boolean loadChunks,
                                         Material forcedListing) {
+        if (!isLiveShopkeeper(shopId, shop, loadChunks)) {
+            unavailableListingStates.remove(shopId);
+            return;
+        }
         Set<Material> unavailable = unavailableListings(shop, loadChunks);
         if (unavailable == null) {
             return;
@@ -691,6 +754,29 @@ final class ShopkeeperController implements Listener {
         if (owner != null && owner.isOnline()) {
             newlyUnavailable.forEach(material -> notifyUnavailable(owner, shop, material));
         }
+    }
+
+    private boolean isLiveShopkeeper(UUID shopId, Shop shop, boolean loadChunk) {
+        if (shop.center == null) {
+            return false;
+        }
+        World world = Bukkit.getWorld(shop.center.world);
+        if (world == null) {
+            return false;
+        }
+        int chunkX = ((int) Math.floor(shop.center.x)) >> 4;
+        int chunkZ = ((int) Math.floor(shop.center.z)) >> 4;
+        if (!world.isChunkLoaded(chunkX, chunkZ)) {
+            if (!loadChunk) {
+                return false;
+            }
+            world.getChunkAt(chunkX, chunkZ);
+        }
+        org.bukkit.entity.Entity entity = Bukkit.getEntity(shopId);
+        return entity instanceof Villager villager
+                && villager.isValid()
+                && !villager.isDead()
+                && shop.owner.equals(owner(villager));
     }
 
     private Set<Material> unavailableListings(Shop shop, boolean loadChunks) {
@@ -804,9 +890,11 @@ final class ShopkeeperController implements Listener {
                 shop.boundaryRadius = bounded(section.getDouble(
                         "boundary-radius", DEFAULT_BOUNDARY_RADIUS),
                         MIN_BOUNDARY_RADIUS, MAX_BOUNDARY_RADIUS, DEFAULT_BOUNDARY_RADIUS);
-                shop.returnSpeed = bounded(section.getDouble(
-                        "return-speed", DEFAULT_RETURN_SPEED),
-                        MIN_RETURN_SPEED, MAX_RETURN_SPEED, DEFAULT_RETURN_SPEED);
+                shop.movementSpeed = bounded(section.getDouble(
+                        "return-speed", DEFAULT_MOVEMENT_SPEED),
+                        MIN_MOVEMENT_SPEED, MAX_MOVEMENT_SPEED, DEFAULT_MOVEMENT_SPEED);
+                shop.maxHealth = bounded(section.getDouble("max-health", DEFAULT_MAX_HEALTH),
+                        MIN_MAX_HEALTH, MAX_MAX_HEALTH, DEFAULT_MAX_HEALTH);
                 for (String encoded : section.getStringList("chests")) {
                     BlockLocation location = BlockLocation.parse(encoded);
                     if (location != null) {
@@ -844,7 +932,8 @@ final class ShopkeeperController implements Listener {
                 data.set(path + ".center.z", shop.center.z);
             }
             data.set(path + ".boundary-radius", shop.boundaryRadius);
-            data.set(path + ".return-speed", shop.returnSpeed);
+            data.set(path + ".return-speed", shop.movementSpeed);
+            data.set(path + ".max-health", shop.maxHealth);
             data.set(path + ".chests", shop.chests.stream().map(BlockLocation::encode).toList());
             for (Map.Entry<Material, Integer> price : shop.prices.entrySet()) {
                 data.set(path + ".prices." + price.getKey().getKey().getKey(), price.getValue());
@@ -862,7 +951,8 @@ final class ShopkeeperController implements Listener {
         private ShopCenter center;
         private String name = "Shopkeeper";
         private double boundaryRadius = DEFAULT_BOUNDARY_RADIUS;
-        private double returnSpeed = DEFAULT_RETURN_SPEED;
+        private double movementSpeed = DEFAULT_MOVEMENT_SPEED;
+        private double maxHealth = DEFAULT_MAX_HEALTH;
         private final Set<BlockLocation> chests = new LinkedHashSet<>();
         private final Map<Material, Integer> prices = new LinkedHashMap<>();
 
