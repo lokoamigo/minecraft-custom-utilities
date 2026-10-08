@@ -14,6 +14,9 @@ commands:
   quickopen:
     description: Opens the shulker box held in your main hand or offhand.
     usage: /quickopen
+  shopkeeper:
+    description: Configures a shopkeeper selected with a named shovel.
+    usage: /shopkeeper <price <item> <emeralds>|unprice <item>|radius <blocks>|speed <multiplier>|health <points>|name <name...>|info>
   killphantoms:
     description: Kills phantoms near the player.
     usage: /killphantoms [radius]

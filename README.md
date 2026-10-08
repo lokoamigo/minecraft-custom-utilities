@@ -55,6 +55,55 @@ an edit is open. Changes are saved when the player clicks Done or signs the book
 cancelling leaves the lectern unchanged. The `minecraftcustomutilities.lecternedit`
 permission is granted to everyone by default.
 
+## Player Shopkeepers
+
+Rename any shovel to `shopkeeper`, then right-click a villager to turn it into
+your shopkeeper and select it. Left-click chests with the same shovel to link or
+unlink their stock. The shovel interaction cancels block damage.
+
+Set per-item prices (in emeralds) for the selected shopkeeper with:
+
+```text
+/shopkeeper price <item> <emeralds>
+/shopkeeper unprice <item>
+/shopkeeper radius <blocks>
+/shopkeeper speed <multiplier>
+/shopkeeper health <points>
+/shopkeeper name <name...>
+/shopkeeper info
+```
+
+Other players can right-click the shopkeeper to open its store. Each purchase
+removes one matching item from a currently loaded linked chest, charges the
+configured number of emeralds, and deposits those emeralds into linked-chest
+storage. Shop ownership, links, and prices persist across server restarts in
+`plugins/MinecraftCustomUtilities/shopkeepers.yml`.
+
+Linked chests cannot be broken by other players or explosions while their
+shopkeeper is alive. Shopkeepers have 40 health points by default, plus armor
+and toughness, and deal two hearts of thorns damage to direct or ranged
+attackers. `/shopkeeper health <points>` sets the selected shopkeeper's maximum
+health between 1 and 1024 points and immediately refills it. The configured
+maximum persists across restarts. Killing a shopkeeper releases its linked
+chests so they can be robbed.
+
+Shopkeepers are marked persistent and configured not to despawn when far from a
+player. These settings are reapplied whenever a saved shopkeeper is loaded.
+
+A shopkeeper keeps its normal AI but is confined to a 5×5-block square centered
+on the position where it was promoted. Near the edge, it pathfinds naturally
+back toward the stored center. Teleporting is only used if it gets far away or
+cannot return after several seconds. Owners can configure the square's radius
+and overall movement-speed multiplier per selected shopkeeper. A radius of `1`
+locks the shopkeeper to its center while leaving its AI active so it can still
+look around. The center and settings persist across restarts. Owners can also
+give each selected shopkeeper a persistent name, which is shown above the
+villager and as the storefront title.
+
+When any configured listing runs out of sellable stock, its owner is notified
+online. Every unavailable listing in owned shops is also reported when the owner
+joins the server.
+
 ## Docker Paper Server
 
 Build and start a local Paper server with this plugin and WorldEdit:
@@ -86,10 +135,19 @@ docker compose up --build
 Useful commands:
 
 ```sh
+make restart-test-server
+make verify-test-server
 docker compose logs -f paper
 docker compose exec paper rcon-cli plugins
 docker compose down
 ```
+
+`make restart-test-server` rebuilds and recreates the Paper container, then
+waits up to 120 seconds for it to become healthy. It also verifies through RCON
+that `MinecraftCustomUtilities` loaded, fails if the plugin reported a startup
+warning or error, and prints the final container status. Run
+`make verify-test-server` to perform those checks without rebuilding or
+restarting the server.
 
 Plugin tuning from the server console or RCON:
 
