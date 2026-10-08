@@ -91,6 +91,12 @@ jobs:
         shell: bash
         run: ./scripts/verify-release.sh "$RELEASE_TAG"
 
+      - name: Generate SHA-256 checksum
+        shell: bash
+        run: |
+          cd target
+          sha256sum MinecraftCustomUtilities.jar > MinecraftCustomUtilities.jar.sha256
+
       - name: Create and push release commit and tag
         env:
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
@@ -121,6 +127,7 @@ jobs:
         run: |
           gh release create "$RELEASE_TAG" \
             target/MinecraftCustomUtilities.jar \
+            target/MinecraftCustomUtilities.jar.sha256 \
             --verify-tag \
             --draft \
             --generate-notes \
@@ -136,7 +143,10 @@ jobs:
           git push origin refs/tags/latest --force
 
           if gh release view latest >/dev/null 2>&1; then
-            gh release upload latest target/MinecraftCustomUtilities.jar --clobber
+            gh release upload latest \
+              target/MinecraftCustomUtilities.jar \
+              target/MinecraftCustomUtilities.jar.sha256 \
+              --clobber
             gh release edit latest \
               --title "Latest Minecraft Custom Utilities Build" \
               --notes "Automatically built from commit $RELEASE_SHA" \
@@ -144,6 +154,7 @@ jobs:
           else
             gh release create latest \
               target/MinecraftCustomUtilities.jar \
+              target/MinecraftCustomUtilities.jar.sha256 \
               --title "Latest Minecraft Custom Utilities Build" \
               --notes "Automatically built from commit $RELEASE_SHA" \
               --latest
