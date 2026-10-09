@@ -9,6 +9,7 @@ public final class MinecraftCustomUtilitiesPlugin extends JavaPlugin {
     private GhastController ghastController;
     private ElytraSlotController elytraSlot;
     private QuickOpenController quickOpen;
+    private LecternBookEditor lecternBookEditor;
     private ShopkeeperController shopkeepers;
 
     @Override
@@ -26,6 +27,8 @@ public final class MinecraftCustomUtilitiesPlugin extends JavaPlugin {
         Bukkit.getPluginManager().registerEvents(elytraSlot, this);
         quickOpen = new QuickOpenController(this);
         Bukkit.getPluginManager().registerEvents(quickOpen, this);
+        lecternBookEditor = new LecternBookEditor(this);
+        Bukkit.getPluginManager().registerEvents(lecternBookEditor, this);
         shopkeepers = new ShopkeeperController(this);
         Bukkit.getPluginManager().registerEvents(shopkeepers, this);
         registerCommand("minecartspeed", "Configure Minecraft Custom Utilities",
@@ -67,6 +70,9 @@ public final class MinecraftCustomUtilitiesPlugin extends JavaPlugin {
         }
         if (quickOpen != null) {
             quickOpen.shutdown();
+        }
+        if (lecternBookEditor != null) {
+            lecternBookEditor.shutdown();
         }
     }
 }
